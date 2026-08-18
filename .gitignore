@@ -1,0 +1,7 @@
+/build
+/target
+/tests/failed_txs
+/Cargo.lock
+
+*.md
+!README.md
