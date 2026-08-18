@@ -1,0 +1,11 @@
+[package]
+name = "zk-lock"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ckb-std = "1.1"
+verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
+[features]
+library = []
+native-simulator = ["library", "ckb-std/native-simulator"]

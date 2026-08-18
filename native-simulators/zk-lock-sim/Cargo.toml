@@ -1,0 +1,15 @@
+[package]
+name = "zk-lock-sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zk-lock = { path = "../../contracts/zk-lock", features = ["native-simulator"] }
+ckb-std = { version = "1.1", features = ["native-simulator"] }
+ctor = "0.6"
+
+[lib]
+crate-type = ["cdylib"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
