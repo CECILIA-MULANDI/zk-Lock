@@ -5,21 +5,19 @@ use ckb_testtool::context::Context;
 // See https://github.com/xxuejie/ckb-native-build-sample/blob/main/tests/src/tests.rs for more examples
 
 // generated unit test for contract zk-lock
-#[test]
-fn test_zk_lock() {
-    // deploy contract
-    let mut context = Context::default();
+
+const MAX_CYCLES: u64 = 10_000_000;
+
+fn build_tx_with_args(
+    context: &mut Context,
+    args: Bytes,
+) -> ckb_testtool::ckb_types::core::TransactionView {
     let out_point = context.deploy_cell_by_name("zk-lock");
+    let lock_script = context.build_script(&out_point, args).expect("script");
 
-    // prepare scripts
-    let lock_script = context
-        .build_script(&out_point, Bytes::from(vec![42]))
-        .expect("script");
-
-    // prepare cells
     let input_out_point = context.create_cell(
         CellOutput::new_builder()
-            .capacity(1000)
+            .capacity(1000u64)
             .lock(lock_script.clone())
             .build(),
         Bytes::new(),
@@ -27,30 +25,41 @@ fn test_zk_lock() {
     let input = CellInput::new_builder()
         .previous_output(input_out_point)
         .build();
+
     let outputs = vec![
         CellOutput::new_builder()
-            .capacity(500)
-            .lock(lock_script.clone())
-            .build(),
-        CellOutput::new_builder()
-            .capacity(500)
+            .capacity(500u64)
             .lock(lock_script)
             .build(),
     ];
-
-    let outputs_data = vec![Bytes::new(); 2];
-
-    // build transaction
-    let tx = TransactionBuilder::default()
+    let outputs_data = vec![Bytes::new(); outputs.len()];
+    let transaction = TransactionBuilder::default()
         .input(input)
         .outputs(outputs)
         .outputs_data(outputs_data.pack())
         .build();
-    let tx = context.complete_tx(tx);
 
-    // run
+    context.complete_tx(transaction)
+}
+#[test]
+fn args_len_64_unlocks() {
+    let mut context = Context::default();
+    let args = Bytes::from(vec![0u8; 64]);
+    let transaction = build_tx_with_args(&mut context, args);
     let cycles = context
-        .verify_tx(&tx, 10_000_000)
-        .expect("pass verification");
+        .verify_tx(&transaction, MAX_CYCLES)
+        .expect("Verification has passed!!!");
     println!("consume cycles: {}", cycles);
+}
+
+#[test]
+fn args_len_rejects() {
+    let mut context = Context::default();
+    let args = Bytes::from(vec![0u8; 63]);
+    let transaction = build_tx_with_args(&mut context, args);
+    let res = context.verify_tx(&transaction, MAX_CYCLES);
+    assert!(
+        res.is_err(),
+        "We expect that verification here will fail because args are 63-bytes"
+    )
 }
