@@ -1,4 +1,5 @@
 [toolchain]
-channel = "1.97.1"
+channel = "stable"
 targets = ["riscv64imac-unknown-none-elf"]
+components = ["rust-analyzer"]
 profile = "minimal"
