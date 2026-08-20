@@ -14,9 +14,20 @@ ckb_std::entry!(program_entry);
 // For more details, please refer to ckb-std's default_alloc macro
 // and the buddy-alloc alloc implementation.
 ckb_std::default_alloc!(16384, 1258306, 64);
+use ckb_std::high_level::load_script;
 
 pub fn program_entry() -> i8 {
-    ckb_std::debug!("This is a sample contract!");
+    let script = match load_script() {
+        Ok(s) => s,
+        Err(_) => return 1,
+    };
+    let args = script.args();
+    let args_bytes = args.raw_data();
 
+    if args_bytes.len() != 64 {
+        return 2;
+    }
+    let _vk_hash = &args_bytes[..32];
+    let _pi_commitment = &args_bytes[32..];
     0
 }
