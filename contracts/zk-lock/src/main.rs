@@ -14,20 +14,48 @@ ckb_std::entry!(program_entry);
 // For more details, please refer to ckb-std's default_alloc macro
 // and the buddy-alloc alloc implementation.
 ckb_std::default_alloc!(16384, 1258306, 64);
-use ckb_std::high_level::load_script;
-
+use ckb_std::ckb_constants::Source;
+use ckb_std::high_level::{load_script, load_witness_args};
+#[path = "error.rs"]
+mod error;
+use error::Error;
+const PROOF_LENGTH: usize = 128;
 pub fn program_entry() -> i8 {
-    let script = match load_script() {
-        Ok(s) => s,
-        Err(_) => return 1,
-    };
+    match main() {
+        Ok(()) => 0,
+        Err(e) => e as i8,
+    }
+}
+fn main() -> Result<(), Error> {
+    let script = load_script()?;
     let args = script.args();
     let args_bytes = args.raw_data();
 
     if args_bytes.len() != 64 {
-        return 2;
+        return Err(Error::ArgsLength);
     }
     let _vk_hash = &args_bytes[..32];
     let _pi_commitment = &args_bytes[32..];
-    0
+
+    let witness_args = load_witness_args(0, Source::GroupInput)?;
+    let lock_bytes = witness_args
+        .lock()
+        .to_opt()
+        .ok_or(Error::WitnessLockMissing)?;
+
+    let witness_lock = lock_bytes.raw_data();
+    if witness_lock.len() < PROOF_LENGTH + 4 {
+        return Err(Error::WitnessLockTooShort);
+    }
+    let _proof_bytes = &witness_lock[..PROOF_LENGTH];
+    let pi_bytes = &witness_lock[PROOF_LENGTH..];
+
+    let pi_count = u32::from_le_bytes(pi_bytes[..4].try_into().unwrap()) as usize;
+
+    if pi_bytes.len() != 4 + pi_count * 32 {
+        return Err(Error::PublicInputsLengthMismatch);
+    }
+
+    let _pi_field_elements = &pi_bytes[4..];
+    Ok(())
 }
