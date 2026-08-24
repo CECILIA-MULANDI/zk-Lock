@@ -1,20 +1,48 @@
-use ckb_testtool::ckb_types::{bytes::Bytes, core::TransactionBuilder, packed::*, prelude::*};
+use ckb_testtool::ckb_hash::blake2b_256;
+use ckb_testtool::ckb_types::{
+    bytes::Bytes,
+    core::TransactionBuilder,
+    packed::{CellDep, CellInput, CellOutput, WitnessArgs},
+    prelude::*,
+};
 use ckb_testtool::context::Context;
 
-// Include your tests here
-// See https://github.com/xxuejie/ckb-native-build-sample/blob/main/tests/src/tests.rs for more examples
+const MAX_CYCLES: u64 = 250_000_000;
 
-// generated unit test for contract zk-lock
+const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
+const PROOF_BYTES: &[u8] = include_bytes!("../fixtures/proof.bin");
+const PI_BYTES: &[u8] = include_bytes!("../fixtures/public_inputs.bin");
 
-const MAX_CYCLES: u64 = 10_000_000;
+fn vk_hash() -> [u8; 32] {
+    blake2b_256(VK_BYTES)
+}
 
-fn build_tx_with_args(
+fn pi_commitment() -> [u8; 32] {
+    blake2b_256(&PI_BYTES[4..])
+}
+
+fn valid_args() -> Bytes {
+    let mut buf = Vec::with_capacity(64);
+    buf.extend_from_slice(&vk_hash());
+    buf.extend_from_slice(&pi_commitment());
+    Bytes::from(buf)
+}
+
+fn valid_witness_lock() -> Bytes {
+    let mut buf = Vec::with_capacity(PROOF_BYTES.len() + PI_BYTES.len());
+    buf.extend_from_slice(PROOF_BYTES);
+    buf.extend_from_slice(PI_BYTES);
+    Bytes::from(buf)
+}
+
+fn build_tx(
     context: &mut Context,
     args: Bytes,
     witness_lock: Option<Bytes>,
+    include_vk_cell_dep: bool,
 ) -> ckb_testtool::ckb_types::core::TransactionView {
-    let out_point = context.deploy_cell_by_name("zk-lock");
-    let lock_script = context.build_script(&out_point, args).expect("script");
+    let script_op = context.deploy_cell_by_name("zk-lock");
+    let lock_script = context.build_script(&script_op, args).expect("script");
 
     let input_out_point = context.create_cell(
         CellOutput::new_builder()
@@ -27,85 +55,98 @@ fn build_tx_with_args(
         .previous_output(input_out_point)
         .build();
 
-    let outputs = vec![
-        CellOutput::new_builder()
-            .capacity(500u64)
-            .lock(lock_script)
-            .build(),
-    ];
+    let outputs = vec![CellOutput::new_builder()
+        .capacity(500u64)
+        .lock(lock_script)
+        .build()];
     let outputs_data = vec![Bytes::new(); outputs.len()];
+
     let witness_args = WitnessArgs::new_builder().lock(witness_lock.pack()).build();
-    let transaction = TransactionBuilder::default()
+
+    let mut builder = TransactionBuilder::default()
         .input(input)
         .outputs(outputs)
         .outputs_data(outputs_data.pack())
-        .witness(witness_args.as_bytes().pack())
-        .build();
+        .witness(witness_args.as_bytes().pack());
 
-    context.complete_tx(transaction)
-}
+    if include_vk_cell_dep {
+        let vk_op = context.deploy_cell(Bytes::from(VK_BYTES.to_vec()));
+        builder = builder.cell_dep(CellDep::new_builder().out_point(vk_op).build());
+    }
 
-fn valid_witness_lock(pi_count: u32, pi_bytes: &[u8]) -> Bytes {
-    let mut buf = Vec::with_capacity(128 + 4 + pi_bytes.len());
-    buf.extend_from_slice(&[0u8; 128]);
-    buf.extend_from_slice(&pi_count.to_le_bytes());
-    buf.extend_from_slice(pi_bytes);
-    Bytes::from(buf)
+    context.complete_tx(builder.build())
 }
 
 #[test]
 fn success_path() {
     let mut context = Context::default();
-    let args = Bytes::from(vec![0u8; 64]);
-    let witness_lock = valid_witness_lock(0, &[]);
-    let transaction = build_tx_with_args(&mut context, args, Some(witness_lock));
-
+    let tx = build_tx(&mut context, valid_args(), Some(valid_witness_lock()), true);
     let cycles = context
-        .verify_tx(&transaction, MAX_CYCLES)
-        .expect("A well-formed witness MUST pass this shape check!!");
-    println!("consume cycle: {}", cycles);
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect("valid Groth16 proof must verify");
+    println!("verified at {} cycles", cycles);
 }
 
 #[test]
 fn args_len_rejects() {
     let mut context = Context::default();
     let args = Bytes::from(vec![0u8; 63]);
-    let transaction = build_tx_with_args(&mut context, args, None);
-    let res = context.verify_tx(&transaction, MAX_CYCLES);
-    assert!(
-        res.is_err(),
-        "We expect that verification here will fail because args are 63-bytes"
-    )
+    let tx = build_tx(&mut context, args, None, false);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }
+
+#[test]
+fn vkey_not_found_rejects() {
+    let mut context = Context::default();
+    let tx = build_tx(&mut context, valid_args(), Some(valid_witness_lock()), false);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
+}
+
 #[test]
 fn witness_missing_rejects() {
     let mut context = Context::default();
-    let args = Bytes::from(vec![0u8; 64]);
-    let transaction = build_tx_with_args(&mut context, args, None);
-    let res = context.verify_tx(&transaction, MAX_CYCLES);
-    assert!(res.is_err(), "WitnessArgs.lock = None must fail");
+    let tx = build_tx(&mut context, valid_args(), None, true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }
 
 #[test]
 fn witness_lock_too_short_rejects() {
     let mut context = Context::default();
-    let args = Bytes::from(vec![0u8; 64]);
-    let witness_lock = Bytes::from(vec![0u8; 100]);
-    let transaction = build_tx_with_args(&mut context, args, Some(witness_lock));
-    let res = context.verify_tx(&transaction, MAX_CYCLES);
-    assert!(res.is_err(), "witness lock under 132 bytes must fail");
+    let short = Bytes::from(vec![0u8; 100]);
+    let tx = build_tx(&mut context, valid_args(), Some(short), true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }
 
 #[test]
 fn pi_length_mismatch_rejects() {
     let mut context = Context::default();
-    let args = Bytes::from(vec![0u8; 64]);
-    // says pi_count = 2 but only one 32-byte field element follows
-    let witness_lock = valid_witness_lock(2, &[0u8; 32]);
-    let transaction = build_tx_with_args(&mut context, args, Some(witness_lock));
-    let res = context.verify_tx(&transaction, MAX_CYCLES);
-    assert!(
-        res.is_err(),
-        "declared vs actual pi length mismatch must fail"
-    );
+    let mut buf = Vec::new();
+    buf.extend_from_slice(PROOF_BYTES);
+    buf.extend_from_slice(&99u32.to_le_bytes());
+    buf.extend_from_slice(&[0u8; 32]);
+    let tx = build_tx(&mut context, valid_args(), Some(Bytes::from(buf)), true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
+}
+
+#[test]
+fn pi_commitment_mismatch_rejects() {
+    let mut context = Context::default();
+    let mut buf = Vec::new();
+    buf.extend_from_slice(PROOF_BYTES);
+    buf.extend_from_slice(&1u32.to_le_bytes());
+    buf.extend_from_slice(&[0xFFu8; 32]);
+    let tx = build_tx(&mut context, valid_args(), Some(Bytes::from(buf)), true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
+}
+
+#[test]
+fn verification_failed_rejects() {
+    let mut context = Context::default();
+    let mut proof = PROOF_BYTES.to_vec();
+    proof[0] ^= 0xFF;
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&proof);
+    buf.extend_from_slice(PI_BYTES);
+    let tx = build_tx(&mut context, valid_args(), Some(Bytes::from(buf)), true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }
