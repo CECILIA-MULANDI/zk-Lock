@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ckb-std = "1.1"
+blake2b-ref = "0.3"
 verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
 [features]
 library = []

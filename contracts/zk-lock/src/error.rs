@@ -12,6 +12,13 @@ pub enum Error {
     WitnessLockMissing,
     WitnessLockTooShort,
     PublicInputsLengthMismatch,
+    VKeyNotFound,
+    PiCommitmentMismatch,
+    InvalidVk,
+    InvalidProof,
+    InvalidPublicInputs,
+    PublicInputCountMismatch,
+    VerificationFailed,
 }
 
 impl From<SysError> for Error {
@@ -23,6 +30,19 @@ impl From<SysError> for Error {
             LengthNotEnough(_) => Self::LengthNotEnough,
             Encoding => Self::Encoding,
             _ => Self::Unknown,
+        }
+    }
+}
+
+impl From<verifier_core::VerifyError> for Error {
+    fn from(err: verifier_core::VerifyError) -> Self {
+        use verifier_core::VerifyError::*;
+        match err {
+            InvalidVk => Self::InvalidVk,
+            InvalidProof => Self::InvalidProof,
+            InvalidPublicInputs => Self::InvalidPublicInputs,
+            PublicInputCountMismatch => Self::PublicInputCountMismatch,
+            VerificationFailed => Self::VerificationFailed,
         }
     }
 }

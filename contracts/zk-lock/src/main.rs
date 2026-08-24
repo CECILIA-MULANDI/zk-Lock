@@ -14,8 +14,11 @@ ckb_std::entry!(program_entry);
 // For more details, please refer to ckb-std's default_alloc macro
 // and the buddy-alloc alloc implementation.
 ckb_std::default_alloc!(16384, 1258306, 64);
+use blake2b_ref::Blake2bBuilder;
 use ckb_std::ckb_constants::Source;
-use ckb_std::high_level::{load_script, load_witness_args};
+use ckb_std::high_level::{
+    QueryIter, load_cell_data, load_cell_data_hash, load_script, load_witness_args,
+};
 #[path = "error.rs"]
 mod error;
 use error::Error;
@@ -34,8 +37,17 @@ fn main() -> Result<(), Error> {
     if args_bytes.len() != 64 {
         return Err(Error::ArgsLength);
     }
-    let _vk_hash = &args_bytes[..32];
-    let _pi_commitment = &args_bytes[32..];
+
+    let mut vk_hash = [0u8; 32];
+    vk_hash.copy_from_slice(&args_bytes[..32]);
+
+    let mut pi_commitment = [0u8; 32];
+    pi_commitment.copy_from_slice(&args_bytes[32..]);
+
+    let vk_index = QueryIter::new(load_cell_data_hash, Source::CellDep)
+        .position(|hash| hash == vk_hash)
+        .ok_or(Error::VKeyNotFound)?;
+    let vkey_bytes = load_cell_data(vk_index, Source::CellDep)?;
 
     let witness_args = load_witness_args(0, Source::GroupInput)?;
     let lock_bytes = witness_args
@@ -47,7 +59,7 @@ fn main() -> Result<(), Error> {
     if witness_lock.len() < PROOF_LENGTH + 4 {
         return Err(Error::WitnessLockTooShort);
     }
-    let _proof_bytes = &witness_lock[..PROOF_LENGTH];
+    let proof_bytes = &witness_lock[..PROOF_LENGTH];
     let pi_bytes = &witness_lock[PROOF_LENGTH..];
 
     let pi_count = u32::from_le_bytes(pi_bytes[..4].try_into().unwrap()) as usize;
@@ -56,6 +68,21 @@ fn main() -> Result<(), Error> {
         return Err(Error::PublicInputsLengthMismatch);
     }
 
-    let _pi_field_elements = &pi_bytes[4..];
+    let pi_field_elements = &pi_bytes[4..];
+    if ckb_blake2b_256(pi_field_elements) != pi_commitment {
+        return Err(Error::PiCommitmentMismatch);
+    }
+    verifier_core::verify(&vkey_bytes, proof_bytes, pi_bytes)?;
     Ok(())
+}
+
+// Helper functions
+fn ckb_blake2b_256(data: &[u8]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let mut hasher = Blake2bBuilder::new(32)
+        .personal(b"ckb-default-hash")
+        .build();
+    hasher.update(data);
+    hasher.finalize(&mut out);
+    out
 }
