@@ -8,6 +8,7 @@ members = [
   "native-simulators/zk-lock-sim",
   "contracts/zk-lock",
   "tests",
+  "cli",
 ]
 
 [profile.release]
