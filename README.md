@@ -1,7 +1,12 @@
-# zk-lock-official
+# zk-Lock
 
-TODO: Write this readme
+A reusable CKB lock script that conditions cell spending on a valid Groth16 proof. Commit to a Circom circuit's verifying key, lock CKB behind it, and spend only by supplying a proof that satisfies the circuit.
 
-*This project was bootstrapped with [ckb-script-templates].*
+## Status
 
-[ckb-script-templates]: https://github.com/nervosnetwork/ckb-script-templates
+- M1: lock script core, local tests pass
+
+## Build
+
+    make build
+    cargo test
