@@ -1,8 +1,7 @@
-use anyhow::*;
 use ckb_hash::blake2b_256;
 use ckb_sdk::constants::SIGHASH_TYPE_HASH;
 use ckb_types::{bytes::Bytes, core::ScriptHashType, packed::Script, prelude::*};
-use secp256k1::{PublicKey, Secp256k1, SecretKey};
+use secp256k1::{PublicKey, Secp256k1};
 pub fn parse_privkey(input: &str) -> anyhow::Result<secp256k1::SecretKey> {
     let cleaned = input.trim().trim_start_matches("0x");
     let cleaned_bytes =
