@@ -55,10 +55,12 @@ fn build_tx(
         .previous_output(input_out_point)
         .build();
 
-    let outputs = vec![CellOutput::new_builder()
-        .capacity(500u64)
-        .lock(lock_script)
-        .build()];
+    let outputs = vec![
+        CellOutput::new_builder()
+            .capacity(500u64)
+            .lock(lock_script)
+            .build(),
+    ];
     let outputs_data = vec![Bytes::new(); outputs.len()];
 
     let witness_args = WitnessArgs::new_builder().lock(witness_lock.pack()).build();
@@ -98,7 +100,12 @@ fn args_len_rejects() {
 #[test]
 fn vkey_not_found_rejects() {
     let mut context = Context::default();
-    let tx = build_tx(&mut context, valid_args(), Some(valid_witness_lock()), false);
+    let tx = build_tx(
+        &mut context,
+        valid_args(),
+        Some(valid_witness_lock()),
+        false,
+    );
     assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }
 
@@ -148,5 +155,52 @@ fn verification_failed_rejects() {
     buf.extend_from_slice(&proof);
     buf.extend_from_slice(PI_BYTES);
     let tx = build_tx(&mut context, valid_args(), Some(Bytes::from(buf)), true);
+    assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
+}
+#[test]
+fn vkey_duplicate_rejects() {
+    let mut context = Context::default();
+    let script_op = context.deploy_cell_by_name("zk-lock");
+    let lock_script = context
+        .build_script(&script_op, valid_args())
+        .expect("script");
+
+    let input_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(1000u64)
+            .lock(lock_script.clone())
+            .build(),
+        Bytes::new(),
+    );
+    let input = CellInput::new_builder()
+        .previous_output(input_out_point)
+        .build();
+
+    let outputs = vec![
+        CellOutput::new_builder()
+            .capacity(500u64)
+            .lock(lock_script)
+            .build(),
+    ];
+    let outputs_data = vec![Bytes::new(); outputs.len()];
+
+    let witness_args = WitnessArgs::new_builder()
+        .lock(Some(valid_witness_lock()).pack())
+        .build();
+
+    // Two cell_deps carrying the same vk bytes -> same data_hash -> duplicate.
+    let vk_op_a = context.deploy_cell(Bytes::from(VK_BYTES.to_vec()));
+    let vk_op_b = context.deploy_cell(Bytes::from(VK_BYTES.to_vec()));
+
+    let tx = TransactionBuilder::default()
+        .input(input)
+        .outputs(outputs)
+        .outputs_data(outputs_data.pack())
+        .witness(witness_args.as_bytes().pack())
+        .cell_dep(CellDep::new_builder().out_point(vk_op_a).build())
+        .cell_dep(CellDep::new_builder().out_point(vk_op_b).build())
+        .build();
+    let tx = context.complete_tx(tx);
+
     assert!(context.verify_tx(&tx, MAX_CYCLES).is_err());
 }

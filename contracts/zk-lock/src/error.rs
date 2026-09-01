@@ -19,6 +19,7 @@ pub enum Error {
     InvalidPublicInputs,
     PublicInputCountMismatch,
     VerificationFailed,
+    VKeyDuplicated,
 }
 
 impl From<SysError> for Error {

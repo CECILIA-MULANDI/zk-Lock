@@ -43,10 +43,17 @@ fn main() -> Result<(), Error> {
 
     let mut pi_commitment = [0u8; 32];
     pi_commitment.copy_from_slice(&args_bytes[32..]);
+    let mut vk_index: Option<usize> = None;
+    for (i, hash) in QueryIter::new(load_cell_data_hash, Source::CellDep).enumerate() {
+        if hash == vk_hash {
+            if vk_index.is_some() {
+                return Err(Error::VKeyDuplicated);
+            }
+            vk_index = Some(i);
+        }
+    }
+    let vk_index = vk_index.ok_or(Error::VKeyNotFound)?;
 
-    let vk_index = QueryIter::new(load_cell_data_hash, Source::CellDep)
-        .position(|hash| hash == vk_hash)
-        .ok_or(Error::VKeyNotFound)?;
     let vkey_bytes = load_cell_data(vk_index, Source::CellDep)?;
 
     let witness_args = load_witness_args(0, Source::GroupInput)?;
