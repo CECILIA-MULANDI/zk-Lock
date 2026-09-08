@@ -52,11 +52,53 @@ enum Command {
     HashPi {
         public_inputs: PathBuf,
     },
+    Verify {
+        vk: PathBuf,
+        proof: PathBuf,
+        public_inputs: PathBuf,
+    },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // Offline commands need no wallet.
+    // NO NEED FOR CKB_PRIVKEY.
+    match &cli.command {
+        Command::Verify {
+            vk,
+            proof,
+            public_inputs,
+        } => {
+            let vk_bytes = std::fs::read(vk).context("read vk file")?;
+            let proof_bytes = std::fs::read(proof).context("read proof file")?;
+            let pi_bytes = std::fs::read(public_inputs).context("read pi file")?;
+            return match verifier_core::verify(&vk_bytes, &proof_bytes, &pi_bytes) {
+                Ok(()) => {
+                    println!("verified OK");
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("verify FAILED: {:?}", e)),
+            };
+        }
+        Command::HashVk { vk } => {
+            let data = std::fs::read(vk)?;
+            let hash = ckb_hash::blake2b_256(&data);
+            println!("vk_hash: 0x{}", hex::encode(hash));
+            return Ok(());
+        }
+        Command::HashPi { public_inputs } => {
+            let data = std::fs::read(public_inputs)?;
+            if data.len() < 4 {
+                anyhow::bail!("The pi file MUST have a 4-byte count prefix");
+            }
+            let hash = ckb_hash::blake2b_256(&data[4..]);
+            println!("pi_commitment: 0x{}", hex::encode(hash));
+            return Ok(());
+        }
+        _ => {}
+    }
+
     let pk_hex = cli
         .privkey
         .as_deref()
@@ -131,6 +173,22 @@ async fn main() -> anyhow::Result<()> {
             }
             let hash = ckb_hash::blake2b_256(&data[4..]);
             println!("pi_commitment: 0x{}", hex::encode(hash));
+        }
+        Command::Verify {
+            vk,
+            proof,
+            public_inputs,
+        } => {
+            let vk_bytes = std::fs::read(&vk).context("read vk file")?;
+            let proof_bytes = std::fs::read(&proof).context("read proof file")?;
+            let pi_bytes = std::fs::read(&public_inputs).context("read pi file")?;
+            match verifier_core::verify(&vk_bytes, &proof_bytes, &pi_bytes) {
+                Ok(()) => println!("verified OK"),
+                Err(e) => {
+                    println!("verify FAILED: {:?}", e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 

@@ -16,3 +16,4 @@ ckb-types = "1.1.3"
 secp256k1 = "0.29"
 ckb-hash = "1.1.1"
 ckb-jsonrpc-types = "1.2.0"
+verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
