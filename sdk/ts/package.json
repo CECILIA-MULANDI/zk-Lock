@@ -1,0 +1,28 @@
+{
+  "name": "@zk-lock/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the zk-Lock CKB script: encode Groth16 artifacts and build deploy/lock/unlock transactions.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^20.14.0"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.0.0"
+  }
+}
