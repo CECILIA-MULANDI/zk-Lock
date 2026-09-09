@@ -3,6 +3,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 mod deploy;
+mod encode;
 mod lock;
 mod unlock;
 mod wallet;
@@ -57,6 +58,21 @@ enum Command {
         proof: PathBuf,
         public_inputs: PathBuf,
     },
+    /// Encode snarkjs vk.json
+    EncodeVk {
+        vk_json: PathBuf,
+        out: PathBuf,
+    },
+    /// Encode snarkjs proof.json
+    EncodeProof {
+        proof_json: PathBuf,
+        out: PathBuf,
+    },
+    /// Encode snarkjs public.json
+    EncodePi {
+        public_json: PathBuf,
+        out: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -95,6 +111,15 @@ async fn main() -> anyhow::Result<()> {
             let hash = ckb_hash::blake2b_256(&data[4..]);
             println!("pi_commitment: 0x{}", hex::encode(hash));
             return Ok(());
+        }
+        Command::EncodeVk { vk_json, out } => {
+            return encode::encode_vk(vk_json, out);
+        }
+        Command::EncodeProof { proof_json, out } => {
+            return encode::encode_proof(proof_json, out);
+        }
+        Command::EncodePi { public_json, out } => {
+            return encode::encode_public_inputs(public_json, out);
         }
         _ => {}
     }
@@ -189,6 +214,15 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(1);
                 }
             }
+        }
+        Command::EncodeVk { vk_json, out } => {
+            return encode::encode_vk(&vk_json, &out);
+        }
+        Command::EncodeProof { proof_json, out } => {
+            return encode::encode_proof(&proof_json, &out);
+        }
+        Command::EncodePi { public_json, out } => {
+            return encode::encode_public_inputs(&public_json, &out);
         }
     }
 
