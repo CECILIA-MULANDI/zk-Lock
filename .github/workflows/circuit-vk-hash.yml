@@ -1,0 +1,41 @@
+name: circuit-vk-hash
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-vk-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install circom
+        run: cargo install --git https://github.com/iden3/circom --tag v2.2.1 --locked
+
+      - name: Install circuit dependencies
+        working-directory: circuits/poseidon-preimage
+        run: npm ci
+
+      - name: Build circuit
+        working-directory: circuits/poseidon-preimage
+        run: bash build.sh
+
+      - name: Encode verifying key
+        run: cargo run -p cli --release -- encode-vk circuits/poseidon-preimage/build/vk.json /tmp/vk.bin
+
+      - name: Compare against pinned hash
+        run: |
+          actual=$(cargo run -p cli --release --quiet -- hash-vk /tmp/vk.bin | awk '{print $2}')
+          expected=$(tr -d '[:space:]' < circuits/poseidon-preimage/expected_vk_hash.txt)
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          [ "$actual" = "$expected" ] || { echo "vk_hash mismatch"; exit 1; }
