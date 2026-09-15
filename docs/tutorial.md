@@ -33,8 +33,8 @@ Repository:
 - Clone the zk-Lock repository and enter it:
 
   ```
-  git clone https://github.com/CECILIA-MULANDI/zk-lock-official.git
-  cd zk-lock-official
+  git clone https://github.com/CECILIA-MULANDI/zk-Lock.git
+  cd zk-Lock
   ```
 
 You will not need to install `snarkjs` globally. It is picked up from the circuit package's `devDependencies` in the next section.
