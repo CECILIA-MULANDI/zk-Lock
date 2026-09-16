@@ -17,7 +17,7 @@ Toolchain:
 - Node.js 22.x
 - circom 2.2.x. Install via `cargo install --git https://github.com/iden3/circom.git --tag v2.2.1`, or grab a release binary from the [circom releases page](https://github.com/iden3/circom/releases) and put it on your PATH.
 - `b2sum` (GNU coreutils; preinstalled on most Linux distros, `brew install coreutils` on macOS).
-- Rust toolchain (only if you plan to follow the CLI path in Section 6B onward).
+- Rust toolchain (only if you plan to follow the CLI path in Section 7B onward).
 
 CKB:
 
@@ -102,7 +102,7 @@ cat build/public.json
 
 That single number is `Poseidon(42)`, and it is the digest anyone else would need to see to be convinced you know its preimage. Along with the proof, this is what you will submit on-chain to unlock a cell.
 
-## 5. Encode artifacts and derive commitments
+## 5. Encode artifacts
 
 The on-chain script does not read snarkjs JSON directly. You need to convert the verifying key, proof, and public inputs into the arkworks-compressed byte layout the CKB verifier expects. There are two ways to do this; both produce byte-identical output:
 
@@ -179,9 +179,9 @@ cargo run --release -p cli -- verify tmp/vk.bin tmp/proof.bin tmp/pi.bin
 
 Expect `verified OK`. If you see anything else, your snarkjs artifacts are not what the verifier expects. Regenerate `proof.json` and `public.json` from a fresh witness and encode again.
 
-### Derive the on-chain commitments
+## 6. Compute the on-chain commitments
 
-The zk-Lock script's `lock.args` is 64 bytes: `blake2b(vk_bytes) || blake2b(public_inputs_bytes[4..])`. Compute them.
+The zk-Lock script's `lock.args` is 64 bytes: `blake2b(vk_bytes) || blake2b(public_inputs_bytes[4..])`. You need both values before you can lock a cell.
 
 Via the CLI:
 
@@ -205,9 +205,9 @@ Save the two 32-byte hashes. You will pass them to the `lock` command in the nex
 
 ---
 
-From here the tutorial forks. Sections 6A/7A/8A show the TypeScript SDK path. Sections 6B/7B/8B show the Rust CLI path. Both land you at the same place: a locked cell on Pudge that you unlock with a Groth16 proof. Pick either and skip the other, or read both.
+From here the tutorial forks. Sections 7A/8A/9A show the TypeScript SDK path. Sections 7B/8B/9B show the Rust CLI path. Both land you at the same place: a locked cell on Pudge that you unlock with a Groth16 proof. Pick either and skip the other, or read both.
 
-## 6A. Deploy the verifying key (TypeScript)
+## 7A. Deploy the verifying key (TypeScript)
 
 The verifying key needs to live on chain in its own cell before you can lock CKB behind it. All zk-Lock cells that share a circuit will reuse this one vk cell as a `cell_dep`.
 
@@ -236,11 +236,11 @@ cd sdk/ts
 npx tsx deploy-vk.ts
 ```
 
-Once mined, note the `out_point`. This is your `vkDep` for the unlock in Section 8A.
+Once mined, note the `out_point`. This is your `vkDep` for the unlock in Section 9A.
 
-## 7A. Lock a cell (TypeScript)
+## 8A. Lock a cell (TypeScript)
 
-Send some CKB to a new cell locked by zk-Lock. The `lock.args` is the two 32-byte commitments you computed in Section 5, concatenated.
+Send some CKB to a new cell locked by zk-Lock. The `lock.args` is the two 32-byte commitments you computed in Section 6, concatenated.
 
 Create `sdk/ts/lock-cell.ts`:
 
@@ -276,7 +276,7 @@ npx tsx lock-cell.ts
 
 Wait for the tx to confirm. The `out_point` is your `cell` for the unlock.
 
-## 8A. Unlock the cell (TypeScript)
+## 9A. Unlock the cell (TypeScript)
 
 To spend the locked cell, submit the proof plus public inputs in the witness.
 
@@ -319,9 +319,9 @@ Run:
 npx tsx unlock-cell.ts
 ```
 
-If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 10.
+If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 11.
 
-## 6B. Deploy the verifying key (Rust CLI)
+## 7B. Deploy the verifying key (Rust CLI)
 
 From the repo root:
 
@@ -329,11 +329,11 @@ From the repo root:
 cargo run -p cli --release -- deploy-vk tmp/vk.bin
 ```
 
-Output shows the deploy tx hash and out_point. Note the out_point. It is your `vk_dep` for the unlock in Section 8B.
+Output shows the deploy tx hash and out_point. Note the out_point. It is your `vk_dep` for the unlock in Section 9B.
 
-## 7B. Lock a cell (Rust CLI)
+## 8B. Lock a cell (Rust CLI)
 
-Substitute the `vk_hash` and `pi_commitment` you computed in Section 5, and pick a capacity in CKB (at least 63 for minimum cell size, 200 is comfortable):
+Substitute the `vk_hash` and `pi_commitment` you computed in Section 6, and pick a capacity in CKB (at least 63 for minimum cell size, 200 is comfortable):
 
 ```
 cargo run -p cli --release -- lock \
@@ -345,7 +345,7 @@ cargo run -p cli --release -- lock \
 
 Output shows the lock tx hash and out_point. Note the out_point. It is your `cell` for the unlock.
 
-## 8B. Unlock the cell (Rust CLI)
+## 9B. Unlock the cell (Rust CLI)
 
 ```
 cargo run -p cli --release -- unlock \
@@ -356,9 +356,9 @@ cargo run -p cli --release -- unlock \
     tmp/pi.bin
 ```
 
-Output shows the unlock tx hash. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands. If you get an error, see Section 10.
+Output shows the unlock tx hash. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands. If you get an error, see Section 11.
 
-## 9. What you have
+## 10. What you have
 
 At this point you have three tx hashes on Pudge:
 
@@ -370,7 +370,7 @@ Look each up on the [Pudge explorer](https://pudge.explorer.nervos.org/).
 
 The interesting one is the unlock. Its witness contains 128 bytes of proof followed by a length-prefixed public-inputs vector. The lock script pulled the vk out of the vk cell (matched by `blake2b(data) == vk_hash`), pulled the public inputs out of the witness (matched against `pi_commitment`), and ran a full Groth16 pairing check. The unlock succeeded because the proof was valid.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 **`verify FAILED: InvalidProof`, `InvalidVk`, or `InvalidPublicInputs`**
 Byte format mismatch. Re-run the encoder against fresh snarkjs artifacts. Because the off-chain `verify` subcommand uses the exact same deserializer as the on-chain script, a successful off-chain `verified OK` guarantees the same bytes are accepted on chain.
