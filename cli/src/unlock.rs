@@ -7,7 +7,8 @@ use ckb_types::{
     packed::{CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
     prelude::*,
 };
-const FEE_SHANNONS: u64 = 1_000;
+const FEE_RATE_SHANNONS_PER_KB: u64 = 1_500;
+
 pub fn unlock(
     recipient: &Script,
     cell: OutPoint,
@@ -33,10 +34,6 @@ pub fn unlock(
 
     let input_capacity: u64 = input_info.output.capacity.into();
 
-    let output_capacity = input_capacity
-        .checked_sub(FEE_SHANNONS)
-        .context("cell capacity is too small to cover the fee")?;
-
     let mut witness_lock = Vec::with_capacity(proof.len() + pi_bytes.len());
     witness_lock.extend_from_slice(&proof);
     witness_lock.extend_from_slice(&pi_bytes);
@@ -45,26 +42,39 @@ pub fn unlock(
         .lock(Some(Bytes::from(witness_lock)).pack())
         .build();
 
-    // zk-lock cell we are spending
-    let input = CellInput::new_builder().previous_output(cell).build();
-    let capacity_packed: ckb_types::packed::Uint64 = output_capacity.pack();
-    //Output thus capacity - fee --> this is what we send to recipient's lock
-    let output = CellOutput::new_builder()
-        .capacity(capacity_packed)
-        .lock(recipient.clone())
-        .build();
+    let build_tx = |output_capacity: u64| {
+        let input = CellInput::new_builder()
+            .previous_output(cell.clone())
+            .build();
+        let capacity_packed: ckb_types::packed::Uint64 = output_capacity.pack();
+        let output = CellOutput::new_builder()
+            .capacity(capacity_packed)
+            .lock(recipient.clone())
+            .build();
+        let contract_cell_dep = CellDep::new_builder()
+            .out_point(contract_dep.clone())
+            .build();
+        let vk_cell_dep = CellDep::new_builder().out_point(vk_dep.clone()).build();
+        TransactionBuilder::default()
+            .input(input)
+            .output(output)
+            .output_data(Bytes::new().pack())
+            .witness(witness_args.as_bytes().pack())
+            .cell_dep(contract_cell_dep)
+            .cell_dep(vk_cell_dep)
+            .build()
+    };
 
-    let contract_cell_dep = CellDep::new_builder().out_point(contract_dep).build();
-    let vk_cell_dep = CellDep::new_builder().out_point(vk_dep).build();
+    // Placeholder tx to measure serialized size, then compute fee from actual bytes.
+    let placeholder = build_tx(input_capacity);
+    let tx_size_bytes = placeholder.data().as_slice().len() as u64;
+    let fee = (tx_size_bytes * FEE_RATE_SHANNONS_PER_KB).div_ceil(1000);
 
-    let tx = TransactionBuilder::default()
-        .input(input)
-        .output(output)
-        .output_data(Bytes::new().pack())
-        .witness(witness_args.as_bytes().pack())
-        .cell_dep(contract_cell_dep)
-        .cell_dep(vk_cell_dep)
-        .build();
+    let output_capacity = input_capacity
+        .checked_sub(fee)
+        .context("cell capacity is too small to cover the computed fee")?;
+
+    let tx = build_tx(output_capacity);
     let json_tx = ckb_jsonrpc_types::TransactionView::from(tx);
     let tx_hash = rpc
         .send_transaction(json_tx.inner, None)
