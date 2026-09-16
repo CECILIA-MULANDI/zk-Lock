@@ -479,12 +479,10 @@ cargo run -p cli --release -- deploy-vk /tmp/vk-bound.bin
 
 ### Lock behind the bound script
 
-Compute the body-only commitment. The generic `hash-pi` command hashes `pi_bytes[4..]` (all elements); for the bound variant, skip the first 32 bytes (pi[0]):
+Compute the body-only commitment. `hash-pi` takes a `--skip` flag that drops the first N public inputs before hashing; for the bound variant, skip `pi[0]` (the context slot):
 
 ```
-cargo run -p cli --release -- hash-pi /tmp/pi-bound.bin
-# then strip the first pi element manually, or:
-tail -c +37 /tmp/pi-bound.bin | b2sum -l 256 -b | awk '{print $1}'
+cargo run -p cli --release -- hash-pi /tmp/pi-bound.bin --skip 1
 ```
 
 Then lock:
@@ -501,10 +499,11 @@ Given the locked cell, the bound contract and vk cell deps, and a placeholder pi
 ```
 cargo run -p cli --release -- context-hash \
     <locked_cell_outpoint> <contract_outpoint> <vk_outpoint> /tmp/pi-bound.bin
-# prints: context: 0x...
+# prints: context (hex): 0x...
+#         context (decimal): ...
 ```
 
-Convert the hex to decimal, plug it into `circuits/poseidon-preimage-bound/input.json` as the `context` field, then re-run `npm run prove`. Encode the fresh `proof.json` and `public.json` to bin.
+Copy the `context (decimal)` value into `circuits/poseidon-preimage-bound/input.json` as the `context` field, then re-run `npm run prove`. Encode the fresh `proof.json` and `public.json` to bin.
 
 ### Unlock the bound cell
 
