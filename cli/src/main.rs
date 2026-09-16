@@ -76,9 +76,11 @@ enum Command {
         vk: PathBuf,
     },
 
-    /// Prints blake2b_256(pi_bytes[4..])
+    /// Prints blake2b_256(pi_bytes[4 + skip*32 ..])
     HashPi {
         public_inputs: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        skip: usize,
     },
     Verify {
         vk: PathBuf,
@@ -130,12 +132,19 @@ async fn main() -> anyhow::Result<()> {
             println!("vk_hash: 0x{}", hex::encode(hash));
             return Ok(());
         }
-        Command::HashPi { public_inputs } => {
+        Command::HashPi {
+            public_inputs,
+            skip,
+        } => {
             let data = std::fs::read(public_inputs)?;
             if data.len() < 4 {
                 anyhow::bail!("The pi file MUST have a 4-byte count prefix");
             }
-            let hash = ckb_hash::blake2b_256(&data[4..]);
+            let start = 4 + skip * 32;
+            if data.len() < start {
+                anyhow::bail!("skip exceeds available public inputs");
+            }
+            let hash = ckb_hash::blake2b_256(&data[start..]);
             println!("pi_commitment: 0x{}", hex::encode(hash));
             return Ok(());
         }
@@ -280,21 +289,16 @@ async fn main() -> anyhow::Result<()> {
                 &recipient_script,
                 &pi_bytes,
             )?;
-            println!("context: 0x{}", hex::encode(scalar));
+            let decimal = num_bigint::BigUint::from_bytes_le(&scalar);
+            println!("context (hex):     0x{}", hex::encode(scalar));
+            println!("context (decimal): {}", decimal);
         }
         Command::HashVk { vk } => {
             let data = std::fs::read(&vk)?;
             let hash = ckb_hash::blake2b_256(&data);
             println!("vk_hash: 0x{}", hex::encode(hash));
         }
-        Command::HashPi { public_inputs } => {
-            let data = std::fs::read(&public_inputs)?;
-            if data.len() < 4 {
-                anyhow::bail!("The pi file MUST have a 4-byte count prefix");
-            }
-            let hash = ckb_hash::blake2b_256(&data[4..]);
-            println!("pi_commitment: 0x{}", hex::encode(hash));
-        }
+        Command::HashPi { .. } => {}
         Command::Verify {
             vk,
             proof,
