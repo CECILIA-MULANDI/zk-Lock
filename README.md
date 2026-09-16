@@ -71,7 +71,9 @@ For the transaction-binding variant, use `lock-bound` / `unlock-bound` in place 
 
 ## Pudge testnet
 
-If you want to reuse the deployed contract instead of running your own `deploy-contract`:
+If you want to reuse the deployed contracts instead of running your own `deploy-contract`:
+
+### Generic `zk-lock`
 
 - Contract cell out_point: `0x7d80c7a2781328cc766497f9d67b036a4d1295bda9f1de0d329bf08afd0e06fb:0` ([explorer](https://pudge.explorer.nervos.org/transaction/0x7d80c7a2781328cc766497f9d67b036a4d1295bda9f1de0d329bf08afd0e06fb))
 - Contract `code_hash` (type): `0x24172f2dc2ebd6634fe925a6f0beda7cfd4cdb9aab1214f2e1cbd3127ea1fa7b`
@@ -81,6 +83,17 @@ Reference transactions built with the current SDK against the Poseidon-preimage 
 
 - Lock: [`0xfa4d3f1d5a67ea93aaadbd360a28e76794fcd207d05354e07c60c934f0265ef0`](https://pudge.explorer.nervos.org/transaction/0xfa4d3f1d5a67ea93aaadbd360a28e76794fcd207d05354e07c60c934f0265ef0)
 - Unlock: [`0x7cc857323e8d41668378ea95c6f0abdbc9f84697ce11b63ae8e18f1529264d65`](https://pudge.explorer.nervos.org/transaction/0x7cc857323e8d41668378ea95c6f0abdbc9f84697ce11b63ae8e18f1529264d65)
+
+### Transaction-binding `zk-lock-bound`
+
+- Contract cell out_point: `0x9cf1e0a6ecc8eeb2705a894a828c07898e77a68a0b9d42b4ff8953bd7c569f5f:0` ([explorer](https://pudge.explorer.nervos.org/transaction/0x9cf1e0a6ecc8eeb2705a894a828c07898e77a68a0b9d42b4ff8953bd7c569f5f))
+- Contract `code_hash` (type): `0x0e366b1b48b88054474a91c7c6487b1edf1a33f25be1622678deab68d5166872`
+- Poseidon-preimage-bound vk cell (used by Section 11 of the tutorial): `0x2adb611b833126ec59234cb8e8645a2da91209fb4450187427fdbf5dc6dad1b9:0`
+
+Reference transactions built with the current SDK against the Poseidon-preimage-bound circuit:
+
+- Lock: [`0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360`](https://pudge.explorer.nervos.org/transaction/0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360)
+- Unlock: [`0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c`](https://pudge.explorer.nervos.org/transaction/0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c)
 
 ## Repository layout
 
