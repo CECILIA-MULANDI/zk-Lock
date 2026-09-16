@@ -13,6 +13,8 @@ Each locked cell carries two 32-byte commitments in its `lock.args`: a hash of t
 
 The on-chain script re-checks the public inputs commitment, then verifies the proof against the vk and inputs. No secp signature is required; the proof is the sole authorization.
 
+A transaction-binding sibling script lives at `contracts/zk-lock-bound/`. It reserves the first public input for a transaction-context scalar and constrains it on chain, which stops mempool witness-copy and recipient-redirect attacks against the generic script. See [Section 11 of the tutorial](docs/tutorial.md#11-transaction-binding-variant-recommended-for-production) for the end-to-end flow.
+
 ## Build
 
     make build
@@ -57,9 +59,15 @@ Unlock the cell by presenting the proof:
 
 `<cell>`, `<contract_dep>`, and `<vk_dep>` are OutPoints in `tx_hash:index` form.
 
+For the transaction-binding variant, use `lock-bound` / `unlock-bound` in place of `lock` / `unlock`, and derive the tx-context scalar with `context-hash` before re-proving:
+
+    cargo run -p cli --release -- lock-bound   <code_hash> <vk_hash> <pi_commitment_body> <capacity>
+    cargo run -p cli --release -- context-hash <cell> <contract_dep> <vk_dep> <public_inputs>
+    cargo run -p cli --release -- unlock-bound <cell> <contract_dep> <vk_dep> <proof> <public_inputs>
+
 ## TypeScript SDK
 
-`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock`. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
+`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `unlockBound`, and `computeContextHash` for the transaction-binding variant. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
 
 ## Pudge testnet
 
@@ -77,9 +85,12 @@ Reference transactions built with the current SDK against the Poseidon-preimage 
 ## Repository layout
 
 - `contracts/zk-lock/`: the on-chain lock script.
+- `contracts/zk-lock-bound/`: transaction-binding sibling script.
 - `cli/`: command-line tool for encoding, deploying, locking, and unlocking.
 - `sdk/ts/`: TypeScript SDK covering the same off-chain surface as the CLI.
 - `circuits/poseidon-preimage/`: reproducible Circom circuit used by the tutorial.
+- `circuits/poseidon-preimage-bound/`: bound-variant Circom circuit with a reserved context input.
 - `docs/tutorial.md`: end-to-end walkthrough from circuit to unlocked cell.
 - `tests/`: integration tests over the built contract binary.
-- `native-simulators/zk-lock-sim/`: native-target simulator for debugging.
+- `native-simulators/zk-lock-sim/`: native-target simulator for the generic script.
+- `native-simulators/zk-lock-bound-sim/`: native-target simulator for the bound script.
