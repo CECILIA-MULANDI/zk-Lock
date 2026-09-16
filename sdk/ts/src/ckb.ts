@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 
-const UNLOCK_FEE_SHANNONS = 1_000n;
 const SHANNONS_PER_CKB = 100_000_000n;
 
 export async function deployVk(
@@ -71,10 +70,6 @@ export async function unlock(
     throw new Error("zk-lock cell is not live (already spent or nonexistent)");
   }
   const inputCapacity = ccc.numFrom(live.cellOutput.capacity);
-  if (inputCapacity <= UNLOCK_FEE_SHANNONS) {
-    throw new Error("zk-lock cell capacity is less than the fixed fee");
-  }
-  const outputCapacity = inputCapacity - UNLOCK_FEE_SHANNONS;
 
   const witnessLock = ccc.hexFrom(
     ccc.bytesConcat(params.proofBytes, params.piBytes)
@@ -82,7 +77,7 @@ export async function unlock(
 
   const tx = ccc.Transaction.from({
     inputs: [{ previousOutput: params.cell }],
-    outputs: [{ lock: recipientLock, capacity: outputCapacity }],
+    outputs: [{ lock: recipientLock, capacity: inputCapacity }],
     outputsData: ["0x"],
     cellDeps: [
       { outPoint: params.contractDep, depType: "code" },
@@ -91,5 +86,6 @@ export async function unlock(
   });
   tx.setWitnessArgs(0, { lock: witnessLock });
 
-  return (await client.sendTransaction(tx)) as `0x${string}`;
+  await tx.completeFeeBy(signer);
+  return (await signer.sendTransaction(tx)) as `0x${string}`;
 }
