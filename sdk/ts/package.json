@@ -25,6 +25,7 @@
     "tsx": "^4.19.0"
   },
   "dependencies": {
-    "@ckb-ccc/core": "^1.0.0"
+    "@ckb-ccc/core": "^1.0.0",
+    "@noble/curves": "^2.4.0"
   }
 }
