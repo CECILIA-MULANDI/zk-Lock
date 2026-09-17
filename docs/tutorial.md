@@ -21,7 +21,7 @@ Toolchain:
 
 CKB:
 
-- A Pudge testnet address funded with at least 300 CKB. Request testnet CKB from the [Nervos faucet](https://faucet.nervos.org/).
+- A Pudge testnet address funded with at least 1,000 CKB. The vk cell alone needs ~357 CKB, and locking a zk-Lock cell costs at least 105 CKB on top of that; 1,000 gives you comfortable headroom for fees and a second run. Request testnet CKB from the [Nervos faucet](https://faucet.nervos.org/).
 - The private key for that address should be exported as an environment variable:
 
   ```
@@ -171,13 +171,43 @@ cd ../..
 
 ### Sanity-check the encoding
 
-Whichever encoder you used, run the on-chain verifier's exact deserializer plus a pairing check against your bytes:
+Whichever encoder you used, run the same deserializer the on-chain script uses plus a Groth16 pairing check locally against your bytes. If the check accepts them, the on-chain script will accept the same bytes.
+
+Via the Rust CLI:
 
 ```
 cargo run --release -p cli -- verify tmp/vk.bin tmp/proof.bin tmp/pi.bin
 ```
 
-Expect `verified OK`. If you see anything else, your snarkjs artifacts are not what the verifier expects. Regenerate `proof.json` and `public.json` from a fresh witness and encode again.
+Expect `verified OK`.
+
+Via the TypeScript SDK, create `sdk/ts/verify-check.ts`:
+
+```ts
+import { readFileSync } from "node:fs";
+import { verify } from "./src/index.js";
+
+const OUT = "../../tmp";
+const result = verify(
+  new Uint8Array(readFileSync(`${OUT}/vk.bin`)),
+  new Uint8Array(readFileSync(`${OUT}/proof.bin`)),
+  new Uint8Array(readFileSync(`${OUT}/pi.bin`)),
+);
+if (!result.ok) throw new Error(`verify FAILED: ${result.error}`);
+console.log("verified OK");
+```
+
+Run it:
+
+```
+cd sdk/ts
+npx tsx verify-check.ts
+cd ../..
+```
+
+Expect `verified OK`.
+
+If either check prints anything else, your snarkjs artifacts are not what the verifier expects. Regenerate `proof.json` and `public.json` from a fresh witness and encode again.
 
 ## 6. Compute the on-chain commitments
 
@@ -190,7 +220,7 @@ cargo run --release -p cli -- hash-vk tmp/vk.bin
 cargo run --release -p cli -- hash-pi tmp/pi.bin
 ```
 
-Via the SDK, extend `sdk/ts/encode.ts` and rerun `npx tsx encode.ts`:
+Via the SDK, extend `sdk/ts/encode.ts` with the block below, then rerun it from `sdk/ts/`:
 
 ```ts
 import { hashVk, hashPi } from "./src/index.js";
@@ -199,6 +229,14 @@ const vkBytes = readFileSync(`${OUT}/vk.bin`);
 const piBytes = readFileSync(`${OUT}/pi.bin`);
 console.log("vk_hash:", hashVk(vkBytes));
 console.log("pi_commitment:", hashPi(piBytes));
+```
+
+Then:
+
+```
+cd sdk/ts
+npx tsx encode.ts
+cd ../..
 ```
 
 Save the two 32-byte hashes. You will pass them to the `lock` command in the next section.
@@ -227,6 +265,10 @@ const { txHash, index } = await deployVk(signer, vkBytes);
 console.log("vk deployed");
 console.log("tx_hash:", txHash);
 console.log("out_point:", `${txHash}:${index}`);
+console.log("waiting for confirmation...");
+await client.waitTransaction(txHash, 0, 300_000);
+console.log("confirmed");
+process.exit(0);
 ```
 
 Run it:
@@ -236,7 +278,7 @@ cd sdk/ts
 npx tsx deploy-vk.ts
 ```
 
-Once mined, note the `out_point`. This is your `vkDep` for the unlock in Section 9A.
+The script waits until the tx confirms, then exits. Note the `out_point`; this is your `vkDep` for the unlock in Section 9A.
 
 ## 8A. Lock a cell (TypeScript)
 
@@ -266,6 +308,10 @@ const { txHash, index } = await lock(signer, {
 
 console.log("cell locked");
 console.log("out_point:", `${txHash}:${index}`);
+console.log("waiting for confirmation...");
+await client.waitTransaction(txHash, 0, 300_000);
+console.log("confirmed");
+process.exit(0);
 ```
 
 Run it:
@@ -274,7 +320,7 @@ Run it:
 npx tsx lock-cell.ts
 ```
 
-Wait for the tx to confirm. The `out_point` is your `cell` for the unlock.
+The script waits until the tx confirms, then exits. The `out_point` is your `cell` for the unlock.
 
 ## 9A. Unlock the cell (TypeScript)
 
@@ -311,6 +357,10 @@ const txHash = await unlock(signer, {
 
 console.log("cell unlocked");
 console.log("tx_hash:", txHash);
+console.log("waiting for confirmation...");
+await client.waitTransaction(txHash, 0, 300_000);
+console.log("confirmed");
+process.exit(0);
 ```
 
 Run:
@@ -319,7 +369,7 @@ Run:
 npx tsx unlock-cell.ts
 ```
 
-If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 11.
+The script waits until the tx confirms, then exits. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 11.
 
 ## 7B. Deploy the verifying key (Rust CLI)
 
@@ -333,7 +383,7 @@ Output shows the deploy tx hash and out_point. Note the out_point. It is your `v
 
 ## 8B. Lock a cell (Rust CLI)
 
-Substitute the `vk_hash` and `pi_commitment` you computed in Section 6, and pick a capacity in CKB (at least 63 for minimum cell size, 200 is comfortable):
+Substitute the `vk_hash` and `pi_commitment` you computed in Section 6, and pick a capacity in CKB (at least 105 for minimum zk-Lock cell size, 200 is comfortable):
 
 ```
 cargo run -p cli --release -- lock \
@@ -388,4 +438,4 @@ The vk cell you referenced does not contain the bytes matching `vk_hash`. Either
 Export the env var: `export CKB_PRIVKEY=0x<64-hex>`. If you are running a script from `sdk/ts/`, either export it in the same shell or pass `--env-file=../../.env` to the `tsx` command.
 
 **`insufficient capacity`**
-Your Pudge address does not have enough CKB. Request more from [the faucet](https://faucet.nervos.org/). Locking a cell needs at least ~63 CKB (minimum cell size) plus a small fee.
+Your Pudge address does not have enough CKB. Request more from [the faucet](https://faucet.nervos.org/). Locking a zk-Lock cell needs at least ~105 CKB plus a small fee; deploying the vk cell earlier needed another ~357 CKB.
