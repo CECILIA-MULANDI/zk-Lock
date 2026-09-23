@@ -1,7 +1,7 @@
 use ckb_testtool::ckb_hash::blake2b_256;
 use ckb_testtool::ckb_types::{
     bytes::Bytes,
-    core::TransactionBuilder,
+    core::{TransactionBuilder, TransactionView},
     packed::{CellDep, CellInput, CellOutput, OutPoint, WitnessArgs},
     prelude::*,
 };
@@ -10,6 +10,36 @@ use ckb_testtool::context::Context;
 const MAX_CYCLES: u64 = 250_000_000;
 const CONTRACT_NAME: &str = "zk-lock-bound";
 const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
+
+// Error discriminants from contracts/zk-lock-bound/src/error.rs.
+// Asserting these matters here: every tx in this file carries a dummy proof,
+// so verify_tx fails no matter what. Without pinning the code, a test would
+// still pass if the check it targets were deleted from the script.
+const E_ARGS_LENGTH: i8 = 10;
+const E_WITNESS_LOCK_MISSING: i8 = 11;
+const E_WITNESS_LOCK_TOO_SHORT: i8 = 12;
+const E_PUBLIC_INPUTS_LENGTH_MISMATCH: i8 = 13;
+const E_VKEY_NOT_FOUND: i8 = 14;
+const E_PI_COMMITMENT_MISMATCH: i8 = 15;
+const E_PUBLIC_INPUT_COUNT_MISMATCH: i8 = 19;
+const E_VKEY_DUPLICATED: i8 = 21;
+const E_CONTEXT_MISMATCH: i8 = 22;
+const E_PUBLIC_INPUT_COUNT_TOO_SMALL: i8 = 23;
+
+fn assert_script_error(err: ckb_testtool::ckb_error::Error, code: i8) {
+    let s = err.to_string();
+    assert!(
+        s.contains(&format!("error code {code} ")),
+        "expected error code {code}, got: {s}"
+    );
+}
+
+fn assert_rejects_with(ctx: &Context, tx: &TransactionView, code: i8) {
+    let err = ctx
+        .verify_tx(tx, MAX_CYCLES)
+        .expect_err("script should have rejected this transaction");
+    assert_script_error(err, code);
+}
 
 fn vk_hash() -> [u8; 32] {
     blake2b_256(VK_BYTES)
@@ -116,7 +146,7 @@ fn build_tx_bound(
 fn args_len_rejects() {
     let mut ctx = Context::default();
     let (tx, _) = build_tx_bound(&mut ctx, Bytes::from(vec![0u8; 63]), None, false);
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_ARGS_LENGTH);
 }
 
 #[test]
@@ -130,7 +160,7 @@ fn vkey_not_found_rejects() {
         Some(witness),
         false,
     );
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_VKEY_NOT_FOUND);
 }
 
 #[test]
@@ -177,7 +207,7 @@ fn vkey_duplicate_rejects() {
         .build();
     let tx = ctx.complete_tx(tx);
 
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_VKEY_DUPLICATED);
 }
 
 #[test]
@@ -185,7 +215,7 @@ fn witness_missing_rejects() {
     let mut ctx = Context::default();
     let commit = commit_body(&[[7u8; 32]]);
     let (tx, _) = build_tx_bound(&mut ctx, args_bytes(vk_hash(), commit), None, true);
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_WITNESS_LOCK_MISSING);
 }
 
 #[test]
@@ -198,7 +228,7 @@ fn witness_lock_too_short_rejects() {
         Some(Bytes::from(vec![0u8; 100])),
         true,
     );
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_WITNESS_LOCK_TOO_SHORT);
 }
 
 #[test]
@@ -215,7 +245,7 @@ fn pi_length_mismatch_rejects() {
         Some(Bytes::from(buf)),
         true,
     );
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_PUBLIC_INPUTS_LENGTH_MISMATCH);
 }
 
 #[test]
@@ -231,7 +261,7 @@ fn pi_count_zero_rejects() {
         Some(Bytes::from(buf)),
         true,
     );
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_PUBLIC_INPUT_COUNT_TOO_SMALL);
 }
 
 #[test]
@@ -244,7 +274,7 @@ fn pi_commitment_mismatch_rejects() {
         Some(witness),
         true,
     );
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_PI_COMMITMENT_MISMATCH);
 }
 
 #[test]
@@ -254,7 +284,7 @@ fn context_mismatch_rejects() {
     let commit = commit_body(&body);
     let witness = pack_witness_lock(&dummy_proof(), &[[0u8; 32], body[0]]);
     let (tx, _) = build_tx_bound(&mut ctx, args_bytes(vk_hash(), commit), Some(witness), true);
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
 }
 
 // Sanity check: when pi[0] equals the expected context and body commitment
@@ -306,5 +336,12 @@ fn context_matches_then_fails_at_groth16() {
         .build();
     let tx = ctx.complete_tx(tx);
 
-    assert!(ctx.verify_tx(&tx, MAX_CYCLES).is_err());
+    // PublicInputCountMismatch, not VerificationFailed: fixtures/vk.bin belongs
+    // to the generic 1-public-input circuit, so supplying 2 PIs trips the
+    // count + 1 == ic_len cross-check inside verifier_core before the pairing
+    // check runs. What matters here is that it got PAST the context check,
+    // which is what confirms the off-chain derivation matches the on-chain one.
+    // This becomes VerificationFailed once the 2-PI bound circuit is generated.
+    assert_rejects_with(&ctx, &tx, E_PUBLIC_INPUT_COUNT_MISMATCH);
 }
+
