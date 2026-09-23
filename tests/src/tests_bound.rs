@@ -2,7 +2,7 @@ use ckb_testtool::ckb_hash::blake2b_256;
 use ckb_testtool::ckb_types::{
     bytes::Bytes,
     core::{TransactionBuilder, TransactionView},
-    packed::{CellDep, CellInput, CellOutput, OutPoint, WitnessArgs},
+    packed::{CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
     prelude::*,
 };
 use ckb_testtool::context::Context;
@@ -345,3 +345,197 @@ fn context_matches_then_fails_at_groth16() {
     assert_rejects_with(&ctx, &tx, E_PUBLIC_INPUT_COUNT_MISMATCH);
 }
 
+// ---------------------------------------------------------------------------
+// Binding tests.
+//
+// build_tx_bound derives the context scalar from the very cells it builds, so
+// it cannot express a mismatch. These tests need the witness to commit to one
+// transaction while a different one is submitted, so they assemble the pieces
+// directly.
+// ---------------------------------------------------------------------------
+
+struct BoundParts {
+    lock_script: Script,
+    vk_dep: CellDep,
+}
+
+fn prepare_bound(ctx: &mut Context, commitment: [u8; 32]) -> BoundParts {
+    let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
+    let vk_op = ctx.deploy_cell(Bytes::from(VK_BYTES.to_vec()));
+    let lock_script = ctx
+        .build_script(&script_op, args_bytes(vk_hash(), commitment))
+        .expect("script");
+    BoundParts {
+        lock_script,
+        vk_dep: CellDep::new_builder().out_point(vk_op).build(),
+    }
+}
+
+fn submit(
+    ctx: &mut Context,
+    parts: &BoundParts,
+    input_out_point: OutPoint,
+    output_cell: CellOutput,
+    output_data: Bytes,
+    witness_lock: Bytes,
+) -> TransactionView {
+    let witness_args = WitnessArgs::new_builder()
+        .lock(Some(witness_lock).pack())
+        .build();
+    let tx = TransactionBuilder::default()
+        .input(
+            CellInput::new_builder()
+                .previous_output(input_out_point)
+                .build(),
+        )
+        .output(output_cell)
+        .output_data(output_data.pack())
+        .witness(witness_args.as_bytes().pack())
+        .cell_dep(parts.vk_dep.clone())
+        .build();
+    ctx.complete_tx(tx)
+}
+
+fn locked_cell(ctx: &mut Context, parts: &BoundParts, capacity: u64) -> OutPoint {
+    ctx.create_cell(
+        CellOutput::new_builder()
+            .capacity(capacity)
+            .lock(parts.lock_script.clone())
+            .build(),
+        Bytes::new(),
+    )
+}
+
+// The proof commits to output(0). Rewriting that output after the fact must
+// invalidate it. This is the recipient-redirect case: an attacker reuses a
+// broadcast witness but pays a different cell.
+#[test]
+fn wrong_output_rejects() {
+    let mut ctx = Context::default();
+    let body: [[u8; 32]; 1] = [[7u8; 32]];
+    let parts = prepare_bound(&mut ctx, commit_body(&body));
+    let input_out_point = locked_cell(&mut ctx, &parts, 1000u64);
+
+    let committed_output = CellOutput::new_builder()
+        .capacity(500u64)
+        .lock(parts.lock_script.clone())
+        .build();
+    let expected = expected_context(&input_out_point, &committed_output, &[]);
+    let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
+
+    // Same shape, different capacity: the attacker keeps the change.
+    let substituted_output = CellOutput::new_builder()
+        .capacity(400u64)
+        .lock(parts.lock_script.clone())
+        .build();
+
+    let tx = submit(
+        &mut ctx,
+        &parts,
+        input_out_point,
+        substituted_output,
+        Bytes::new(),
+        witness,
+    );
+    assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
+}
+
+// output(0)'s DATA is folded into the scalar alongside the cell struct. The
+// other tests all use empty output data, so this is the only one exercising
+// that half of first_out_hash.
+#[test]
+fn wrong_output_data_rejects() {
+    let mut ctx = Context::default();
+    let body: [[u8; 32]; 1] = [[7u8; 32]];
+    let parts = prepare_bound(&mut ctx, commit_body(&body));
+    let input_out_point = locked_cell(&mut ctx, &parts, 1000u64);
+
+    let output_cell = CellOutput::new_builder()
+        .capacity(500u64)
+        .lock(parts.lock_script.clone())
+        .build();
+
+    // Identical cell struct; only the data differs.
+    let expected = expected_context(&input_out_point, &output_cell, b"committed");
+    let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
+
+    let tx = submit(
+        &mut ctx,
+        &parts,
+        input_out_point,
+        output_cell,
+        Bytes::from_static(b"substituted"),
+        witness,
+    );
+    assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
+}
+
+// The proof commits to the spent OutPoint. Reusing the witness against a
+// different cell carrying identical args must fail. This is the mempool
+// witness-copy case, and it is the cross-cell replay that plain zk-lock
+// cannot prevent.
+#[test]
+fn wrong_input_rejects() {
+    let mut ctx = Context::default();
+    let body: [[u8; 32]; 1] = [[7u8; 32]];
+    let parts = prepare_bound(&mut ctx, commit_body(&body));
+
+    // Two cells, same lock args, different outpoints.
+    let committed_input = locked_cell(&mut ctx, &parts, 1000u64);
+    let other_input = locked_cell(&mut ctx, &parts, 1000u64);
+    assert_ne!(committed_input, other_input);
+
+    let output_cell = CellOutput::new_builder()
+        .capacity(500u64)
+        .lock(parts.lock_script.clone())
+        .build();
+
+    let expected = expected_context(&committed_input, &output_cell, &[]);
+    let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
+
+    let tx = submit(
+        &mut ctx,
+        &parts,
+        other_input,
+        output_cell,
+        Bytes::new(),
+        witness,
+    );
+    assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
+}
+
+// A witness built for the generic zk-lock has no reserved context slot: every
+// scalar is statement. Posting it at the bound lock must fail, because the
+// bound lock reads pi[0] as context and commits only pi[1..]. The two args
+// layouts are not interchangeable, which is the point of treating them as
+// separate profiles.
+#[test]
+fn generic_witness_replayed_against_bound_rejects() {
+    let mut ctx = Context::default();
+
+    // Generic layout: args commit to the WHOLE pi array.
+    let generic_pi: [[u8; 32]; 2] = [[3u8; 32], [7u8; 32]];
+    let generic_commitment = commit_body(&generic_pi);
+
+    let parts = prepare_bound(&mut ctx, generic_commitment);
+    let input_out_point = locked_cell(&mut ctx, &parts, 1000u64);
+    let output_cell = CellOutput::new_builder()
+        .capacity(500u64)
+        .lock(parts.lock_script.clone())
+        .build();
+
+    let witness = pack_witness_lock(&dummy_proof(), &generic_pi);
+
+    // The bound lock hashes pi[1..] only, so it never matches a commitment
+    // taken over pi[0..]. It fails on the commitment before it even reaches
+    // the context comparison.
+    let tx = submit(
+        &mut ctx,
+        &parts,
+        input_out_point,
+        output_cell,
+        Bytes::new(),
+        witness,
+    );
+    assert_rejects_with(&ctx, &tx, E_PI_COMMITMENT_MISMATCH);
+}
