@@ -1,7 +1,7 @@
 use ckb_testtool::ckb_hash::blake2b_256;
 use ckb_testtool::ckb_types::{
     bytes::Bytes,
-    core::{TransactionBuilder, TransactionView},
+    core::{ScriptHashType, TransactionBuilder, TransactionView},
     packed::{CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
     prelude::*,
 };
@@ -10,6 +10,18 @@ use ckb_testtool::context::Context;
 const MAX_CYCLES: u64 = 250_000_000;
 const CONTRACT_NAME: &str = "zk-lock-bound";
 const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
+
+// poseidon-preimage-bound fixtures: pi[0] is the context scalar, pi[1] the
+// digest. Only valid for the transaction success_path builds.
+//
+// To regenerate: set `context` in that circuit's input.json to the decimal
+// below, run prove.sh, encode with the CLI, and leave input.json back at "1"
+// (the tutorial has readers put their own context there).
+//
+//   404578604207945987828464291583686507717703603553113816808421978804353673971
+const BOUND_VK_BYTES: &[u8] = include_bytes!("../fixtures/bound/vk.bin");
+const BOUND_PROOF_BYTES: &[u8] = include_bytes!("../fixtures/bound/proof.bin");
+const BOUND_PI_BYTES: &[u8] = include_bytes!("../fixtures/bound/public_inputs.bin");
 
 // Error discriminants from contracts/zk-lock-bound/src/error.rs.
 // Asserting these matters here: every tx in this file carries a dummy proof,
@@ -21,7 +33,7 @@ const E_WITNESS_LOCK_TOO_SHORT: i8 = 12;
 const E_PUBLIC_INPUTS_LENGTH_MISMATCH: i8 = 13;
 const E_VKEY_NOT_FOUND: i8 = 14;
 const E_PI_COMMITMENT_MISMATCH: i8 = 15;
-const E_PUBLIC_INPUT_COUNT_MISMATCH: i8 = 19;
+const E_INVALID_PROOF: i8 = 17;
 const E_VKEY_DUPLICATED: i8 = 21;
 const E_CONTEXT_MISMATCH: i8 = 22;
 const E_PUBLIC_INPUT_COUNT_TOO_SMALL: i8 = 23;
@@ -291,19 +303,19 @@ fn context_mismatch_rejects() {
 // matches, all pre-Groth16 checks pass; the script reaches verifier_core::verify
 // and rejects on our garbage proof.
 // This confirms our off-chain context
-// computation matches the on-chain one. Full success path arrives once the
-// bound-compatible circuit is regenerated with pi[0] as a public input.
+// computation matches the on-chain one. Uses the bound VK so the arity
+// cross-check passes and the rejection comes from the proof itself.
 #[test]
 fn context_matches_then_fails_at_groth16() {
     let mut ctx = Context::default();
 
     let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
-    let vk_op = ctx.deploy_cell(Bytes::from(VK_BYTES.to_vec()));
+    let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
 
     let body: [[u8; 32]; 1] = [[7u8; 32]];
     let commit = commit_body(&body);
     let lock_script = ctx
-        .build_script(&script_op, args_bytes(vk_hash(), commit))
+        .build_script(&script_op, args_bytes(bound_vk_hash(), commit))
         .expect("script");
 
     let input_out_point = ctx.create_cell(
@@ -336,13 +348,11 @@ fn context_matches_then_fails_at_groth16() {
         .build();
     let tx = ctx.complete_tx(tx);
 
-    // PublicInputCountMismatch, not VerificationFailed: fixtures/vk.bin belongs
-    // to the generic 1-public-input circuit, so supplying 2 PIs trips the
-    // count + 1 == ic_len cross-check inside verifier_core before the pairing
-    // check runs. What matters here is that it got PAST the context check,
-    // which is what confirms the off-chain derivation matches the on-chain one.
-    // This becomes VerificationFailed once the 2-PI bound circuit is generated.
-    assert_rejects_with(&ctx, &tx, E_PUBLIC_INPUT_COUNT_MISMATCH);
+    // InvalidProof, not VerificationFailed: dummy_proof() is 128 zero bytes,
+    // which decodes to points at infinity, and verifier_core rejects those
+    // before the pairing check. Either way it got past the context and
+    // commitment checks, which is the point of this test.
+    assert_rejects_with(&ctx, &tx, E_INVALID_PROOF);
 }
 
 // ---------------------------------------------------------------------------
@@ -538,4 +548,106 @@ fn generic_witness_replayed_against_bound_rejects() {
         witness,
     );
     assert_rejects_with(&ctx, &tx, E_PI_COMMITMENT_MISMATCH);
+}
+
+// Every piece feeding the context scalar is pinned: the committed proof is
+// only valid against this exact transaction. output(0)'s lock is hardcoded
+// rather than the bound script so the scalar does not depend on the compiled
+// contract, which would invalidate the proof on every rebuild.
+const PINNED_INPUT_TX_HASH: [u8; 32] = [0xAA; 32];
+const PINNED_OUT_CODE_HASH: [u8; 32] = [0xBB; 32];
+const PINNED_OUT_ARGS: [u8; 20] = [0xCC; 20];
+const PINNED_OUT_CAPACITY: u64 = 500;
+
+fn bound_vk_hash() -> [u8; 32] {
+    blake2b_256(BOUND_VK_BYTES)
+}
+
+// The script commits to pi[1..]: past the 4-byte count and the context.
+fn bound_body_commitment() -> [u8; 32] {
+    blake2b_256(&BOUND_PI_BYTES[36..])
+}
+
+fn bound_context_pi() -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&BOUND_PI_BYTES[4..36]);
+    out
+}
+
+// public_inputs.bin already has the layout pack_witness_lock builds, so the
+// witness lock is a plain concatenation.
+fn bound_witness_lock() -> Bytes {
+    let mut buf = Vec::with_capacity(BOUND_PROOF_BYTES.len() + BOUND_PI_BYTES.len());
+    buf.extend_from_slice(BOUND_PROOF_BYTES);
+    buf.extend_from_slice(BOUND_PI_BYTES);
+    Bytes::from(buf)
+}
+
+fn pinned_output_cell() -> CellOutput {
+    let lock = Script::new_builder()
+        .code_hash(PINNED_OUT_CODE_HASH.pack())
+        .hash_type(ScriptHashType::Data1)
+        .args(Bytes::from(PINNED_OUT_ARGS.to_vec()).pack())
+        .build();
+    CellOutput::new_builder()
+        .capacity(PINNED_OUT_CAPACITY)
+        .lock(lock)
+        .build()
+}
+
+#[test]
+fn success_path() {
+    let mut ctx = Context::default();
+
+    let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
+    let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
+    let lock_script = ctx
+        .build_script(
+            &script_op,
+            args_bytes(bound_vk_hash(), bound_body_commitment()),
+        )
+        .expect("script");
+
+    let input_out_point = OutPoint::new_builder()
+        .tx_hash(PINNED_INPUT_TX_HASH.pack())
+        .index(0u32)
+        .build();
+    ctx.create_cell_with_out_point(
+        input_out_point.clone(),
+        CellOutput::new_builder()
+            .capacity(1000u64)
+            .lock(lock_script)
+            .build(),
+        Bytes::new(),
+    );
+
+    let output_cell = pinned_output_cell();
+
+    assert_eq!(
+        expected_context(&input_out_point, &output_cell, &[]),
+        bound_context_pi(),
+        "pinned transaction no longer derives the context the fixtures were \
+         proved against; re-run circuits/poseidon-preimage-bound/prove.sh"
+    );
+
+    let witness_args = WitnessArgs::new_builder()
+        .lock(Some(bound_witness_lock()).pack())
+        .build();
+    let tx = TransactionBuilder::default()
+        .input(
+            CellInput::new_builder()
+                .previous_output(input_out_point)
+                .build(),
+        )
+        .output(output_cell)
+        .output_data(Bytes::new().pack())
+        .witness(witness_args.as_bytes().pack())
+        .cell_dep(CellDep::new_builder().out_point(vk_op).build())
+        .build();
+    let tx = ctx.complete_tx(tx);
+
+    let cycles = ctx
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect("bound lock should accept a proof bound to this transaction");
+    println!("success_path consumed {cycles} cycles");
 }
