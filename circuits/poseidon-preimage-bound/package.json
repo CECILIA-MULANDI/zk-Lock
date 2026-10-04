@@ -1,0 +1,18 @@
+{
+  "name": "poseidon-preimage-bound-circuit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bound-variant Poseidon-preimage Circom circuit for zk-Lock (reserves pi[0] for tx context)",
+  "scripts": {
+    "build": "bash build.sh",
+    "prove": "bash prove.sh",
+    "clean": "rm -rf build"
+  },
+  "devDependencies": {
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.5"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

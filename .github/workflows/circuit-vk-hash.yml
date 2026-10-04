@@ -9,6 +9,10 @@ on:
 jobs:
   verify-vk-hash:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        circuit: [poseidon-preimage, poseidon-preimage-bound]
     steps:
       - uses: actions/checkout@v4
 
@@ -22,20 +26,20 @@ jobs:
         run: cargo install --git https://github.com/iden3/circom --tag v2.2.1 --locked
 
       - name: Install circuit dependencies
-        working-directory: circuits/poseidon-preimage
+        working-directory: circuits/${{ matrix.circuit }}
         run: npm ci
 
       - name: Build circuit
-        working-directory: circuits/poseidon-preimage
+        working-directory: circuits/${{ matrix.circuit }}
         run: bash build.sh
 
       - name: Encode verifying key
-        run: cargo run -p cli --release -- encode-vk circuits/poseidon-preimage/build/vk.json /tmp/vk.bin
+        run: cargo run -p cli --release -- encode-vk circuits/${{ matrix.circuit }}/build/vk.json /tmp/vk.bin
 
       - name: Compare against pinned hash
         run: |
           actual=$(cargo run -p cli --release --quiet -- hash-vk /tmp/vk.bin | awk '{print $2}')
-          expected=$(tr -d '[:space:]' < circuits/poseidon-preimage/expected_vk_hash.txt)
+          expected=$(tr -d '[:space:]' < circuits/${{ matrix.circuit }}/expected_vk_hash.txt)
           echo "expected: $expected"
           echo "actual:   $actual"
-          [ "$actual" = "$expected" ] || { echo "vk_hash mismatch"; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "vk_hash mismatch for ${{ matrix.circuit }}"; exit 1; }

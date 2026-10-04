@@ -8,9 +8,13 @@ export function hashVk(vkBytes: Uint8Array): `0x${string}` {
 }
 
 //blake2b_256 of the public input Fr bytes
-export function hashPi(piBytes: Uint8Array): `0x${string}` {
+export function hashPi(piBytes: Uint8Array, skip: number = 0): `0x${string}` {
   if (piBytes.length < 4) {
     throw new Error("pi bytes must include the 4-byte length prefix");
   }
-  return hashCkb(piBytes.slice(4)) as `0x${string}`;
+  const start = 4 + skip * 32;
+  if (piBytes.length < start) {
+    throw new Error("skip exceeds available public inputs");
+  }
+  return hashCkb(piBytes.slice(start)) as `0x${string}`;
 }

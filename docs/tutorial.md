@@ -369,7 +369,7 @@ Run:
 npx tsx unlock-cell.ts
 ```
 
-The script waits until the tx confirms, then exits. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 11.
+The script waits until the tx confirms, then exits. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands and your CKB moves back to your default lock. If you get an error, see Section 12.
 
 ## 7B. Deploy the verifying key (Rust CLI)
 
@@ -406,7 +406,7 @@ cargo run -p cli --release -- unlock \
     tmp/pi.bin
 ```
 
-Output shows the unlock tx hash. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands. If you get an error, see Section 11.
+Output shows the unlock tx hash. If the proof and public inputs match the committed vk and pi_commitment, the transaction lands. If you get an error, see Section 12.
 
 ## 10. What you have
 
@@ -420,7 +420,112 @@ Look each up on the [Pudge explorer](https://pudge.explorer.nervos.org/).
 
 The interesting one is the unlock. Its witness contains 128 bytes of proof followed by a length-prefixed public-inputs vector. The lock script pulled the vk out of the vk cell (matched by `blake2b(data) == vk_hash`), pulled the public inputs out of the witness (matched against `pi_commitment`), and ran a full Groth16 pairing check. The unlock succeeded because the proof was valid.
 
-## 11. Troubleshooting
+## 11. Transaction-binding variant (recommended for production)
+
+The generic zk-Lock above verifies the proof but does not tie it to a specific transaction. Anyone who sees a pending unlock in the mempool can copy the witness verbatim, substitute their own recipient into the first output, and race it. The proof still validates because the on-chain script only asks "is this proof valid for these public inputs?", not "was this proof produced for this tx?".
+
+The **bound variant** at `contracts/zk-lock-bound/` closes that gap. It reserves the first public input `pi[0]` for a transaction-context scalar and asserts on-chain that
+
+```
+pi[0] == blake2b(input_outpoint || blake2b(first_output_cell || first_output_data))
+```
+
+truncated to 31 bytes plus a zero byte so it fits in the BN254 scalar field.
+
+### What the bound circuit looks like
+
+`circuits/poseidon-preimage-bound/circuit.circom` shows the pattern. Compared to the generic circuit, one input is added and one output is flipped to an input so we can control PI ordering:
+
+```circom
+template PoseidonPreimageBound() {
+    signal input context;
+    signal input digest;
+    signal input preimage;
+
+    component hasher = Poseidon(1);
+    hasher.inputs[0] <== preimage;
+    hasher.out === digest;
+}
+
+component main {public [context, digest]} = PoseidonPreimageBound();
+```
+
+`context` is a public input the circuit does not constrain. The on-chain script constrains it. The circuit just reserves its position in the PI vector.
+
+`pi_commitment` in `lock.args` covers `pi[1..N]` only (the "body"), because `pi[0]` is unknown at lock time; it is computed from the tx layout at unlock time.
+
+### Deploy the bound contract and verifying key
+
+Once, per Pudge address:
+
+```
+make build CONTRACT=zk-lock-bound
+cargo run -p cli --release -- deploy-contract build/release/zk-lock-bound
+# note the tx_hash, out_point, and code_hash(type) that print
+```
+
+Once, per circuit:
+
+```
+cd circuits/poseidon-preimage-bound
+npm install
+npm run build
+
+cd ../..
+cargo run -p cli --release -- encode-vk circuits/poseidon-preimage-bound/build/vk.json /tmp/vk-bound.bin
+cargo run -p cli --release -- deploy-vk /tmp/vk-bound.bin
+# note the vk out_point and vk_hash
+```
+
+### Lock behind the bound script
+
+Compute the body-only commitment. `hash-pi` takes a `--skip` flag that drops the first N public inputs before hashing; for the bound variant, skip `pi[0]` (the context slot):
+
+```
+cargo run -p cli --release -- hash-pi /tmp/pi-bound.bin --skip 1
+```
+
+Then lock:
+
+```
+cargo run -p cli --release -- lock-bound <bound_code_hash> <vk_hash> <pi_commitment_body> <capacity_ckb>
+# note the locked cell out_point
+```
+
+### Compute the context and re-prove
+
+Given the locked cell, the bound contract and vk cell deps, and a placeholder pi.bin so `context-hash` can measure witness size:
+
+```
+cargo run -p cli --release -- context-hash \
+    <locked_cell_outpoint> <contract_outpoint> <vk_outpoint> /tmp/pi-bound.bin
+# prints: context (hex): 0x...
+#         context (decimal): ...
+```
+
+Copy the `context (decimal)` value into `circuits/poseidon-preimage-bound/input.json` as the `context` field, then re-run `npm run prove`. Encode the fresh `proof.json` and `public.json` to bin.
+
+### Unlock the bound cell
+
+```
+cargo run -p cli --release -- unlock-bound \
+    <locked_cell_outpoint> <contract_outpoint> <vk_outpoint> \
+    /tmp/proof-bound.bin /tmp/pi-bound.bin
+```
+
+Pass `--recipient <address>` to send the unlocked funds to a different address; omit it to self-spend.
+
+### What the binding gives you
+
+- Cross-cell replay: prevented. `input_outpoint` is unique per cell.
+- Recipient redirect: prevented. The first output cell bytes are hashed into the context; changing the recipient changes the hash.
+- Same-tx reordering: partially prevented. The first output slot is fixed by construction; downstream outputs are not.
+
+If you build unlock transactions with a different first-output layout than `context-hash` assumed (different fee rate, different data, non-empty type script), the on-chain check will fail. That is the intended behavior: the binding is only as tight as the tx layout you agree to.
+
+The SDK exposes the same operations as `lockBound`, `unlockBound`, and `computeContextHash` in `sdk/ts/src/ckb.ts`.
+
+## 12. Troubleshooting
 
 **`verify FAILED: InvalidProof`, `InvalidVk`, or `InvalidPublicInputs`**
 Byte format mismatch. Re-run the encoder against fresh snarkjs artifacts. Because the off-chain `verify` subcommand uses the exact same deserializer as the on-chain script, a successful off-chain `verified OK` guarantees the same bytes are accepted on chain.

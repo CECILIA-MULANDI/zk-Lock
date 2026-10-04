@@ -2,6 +2,7 @@ use anyhow::Context;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+mod context;
 mod deploy;
 mod encode;
 mod lock;
@@ -44,14 +45,42 @@ enum Command {
         proof: PathBuf,
         public_inputs: PathBuf,
     },
+    /// Same as `lock` but wired for the tx-context-bound zk-lock variant.
+    LockBound {
+        code_hash: String,
+        vk_hash: String,
+        pi_commitment: String,
+        capacity_ckb: u64,
+    },
+    /// Same as `unlock` but for the bound variant. `--recipient` overrides self-spend.
+    UnlockBound {
+        cell: String,
+        contract_dep: String,
+        vk_dep: String,
+        proof: PathBuf,
+        public_inputs: PathBuf,
+        #[arg(long)]
+        recipient: Option<String>,
+    },
+    /// Compute the expected pi[0] context scalar for a bound-variant unlock.
+    ContextHash {
+        cell: String,
+        contract_dep: String,
+        vk_dep: String,
+        public_inputs: PathBuf,
+        #[arg(long)]
+        recipient: Option<String>,
+    },
     /// Prints blake2b_256(vk_bytes)
     HashVk {
         vk: PathBuf,
     },
 
-    /// Prints blake2b_256(pi_bytes[4..])
+    /// Prints blake2b_256(pi_bytes[4 + skip*32 ..])
     HashPi {
         public_inputs: PathBuf,
+        #[arg(long, default_value_t = 0)]
+        skip: usize,
     },
     Verify {
         vk: PathBuf,
@@ -103,12 +132,19 @@ async fn main() -> anyhow::Result<()> {
             println!("vk_hash: 0x{}", hex::encode(hash));
             return Ok(());
         }
-        Command::HashPi { public_inputs } => {
+        Command::HashPi {
+            public_inputs,
+            skip,
+        } => {
             let data = std::fs::read(public_inputs)?;
             if data.len() < 4 {
                 anyhow::bail!("The pi file MUST have a 4-byte count prefix");
             }
-            let hash = ckb_hash::blake2b_256(&data[4..]);
+            let start = 4 + skip * 32;
+            if data.len() < start {
+                anyhow::bail!("skip exceeds available public inputs");
+            }
+            let hash = ckb_hash::blake2b_256(&data[start..]);
             println!("pi_commitment: 0x{}", hex::encode(hash));
             return Ok(());
         }
@@ -186,19 +222,83 @@ async fn main() -> anyhow::Result<()> {
             println!("unlocked");
             println!("tx_hash:   {:#x}", tx);
         }
+        Command::LockBound {
+            code_hash,
+            vk_hash,
+            pi_commitment,
+            capacity_ckb,
+        } => {
+            let code_hash = parse_h256(&code_hash).context("code_hash")?;
+            let vk_hash = parse_bytes32(&vk_hash).context("vk_hash")?;
+            let pi_commitment = parse_bytes32(&pi_commitment).context("pi_commitment")?;
+            let (tx, idx) = lock::lock(
+                &sk,
+                &sender,
+                code_hash,
+                vk_hash,
+                pi_commitment,
+                capacity_ckb,
+            )?;
+            println!("bound locked cell created");
+            println!("tx_hash:   {:#x}", tx);
+            println!("out_point: {:#x}:{}", tx, idx);
+        }
+        Command::UnlockBound {
+            cell,
+            contract_dep,
+            vk_dep,
+            proof,
+            public_inputs,
+            recipient,
+        } => {
+            let cell = parse_outpoint(&cell).context("cell")?;
+            let contract_dep = parse_outpoint(&contract_dep).context("contract_dep")?;
+            let vk_dep = parse_outpoint(&vk_dep).context("vk_dep")?;
+            let recipient_script = parse_recipient(recipient.as_deref(), &sender)?;
+            let proof_bytes = std::fs::read(&proof).context("read proof file")?;
+            let pi_bytes = std::fs::read(&public_inputs).context("read pi file")?;
+
+            let tx = unlock::unlock(
+                &recipient_script,
+                cell,
+                contract_dep,
+                vk_dep,
+                proof_bytes,
+                pi_bytes,
+            )?;
+            println!("bound unlocked");
+            println!("tx_hash:   {:#x}", tx);
+        }
+        Command::ContextHash {
+            cell,
+            contract_dep,
+            vk_dep,
+            public_inputs,
+            recipient,
+        } => {
+            let cell = parse_outpoint(&cell).context("cell")?;
+            let contract_dep = parse_outpoint(&contract_dep).context("contract_dep")?;
+            let vk_dep = parse_outpoint(&vk_dep).context("vk_dep")?;
+            let recipient_script = parse_recipient(recipient.as_deref(), &sender)?;
+            let pi_bytes = std::fs::read(&public_inputs).context("read pi file")?;
+
+            let scalar = context::compute_context(
+                cell,
+                contract_dep,
+                vk_dep,
+                &recipient_script,
+                &pi_bytes,
+            )?;
+            let decimal = num_bigint::BigUint::from_bytes_le(&scalar);
+            println!("context (hex):     0x{}", hex::encode(scalar));
+            println!("context (decimal): {}", decimal);
+        }
         Command::HashVk { vk } => {
             let data = std::fs::read(&vk)?;
             let hash = ckb_hash::blake2b_256(&data);
             println!("vk_hash: 0x{}", hex::encode(hash));
         }
-        Command::HashPi { public_inputs } => {
-            let data = std::fs::read(&public_inputs)?;
-            if data.len() < 4 {
-                anyhow::bail!("The pi file MUST have a 4-byte count prefix");
-            }
-            let hash = ckb_hash::blake2b_256(&data[4..]);
-            println!("pi_commitment: 0x{}", hex::encode(hash));
-        }
+        Command::HashPi { .. } => {}
         Command::Verify {
             vk,
             proof,
@@ -258,4 +358,19 @@ fn parse_outpoint(s: &str) -> anyhow::Result<ckb_types::packed::OutPoint> {
         .tx_hash(tx_hash.pack())
         .index(idx_packed)
         .build())
+}
+
+fn parse_recipient(
+    s: Option<&str>,
+    sender: &ckb_types::packed::Script,
+) -> anyhow::Result<ckb_types::packed::Script> {
+    use std::str::FromStr;
+    match s {
+        None => Ok(sender.clone()),
+        Some(addr_str) => {
+            let addr = ckb_sdk::Address::from_str(addr_str)
+                .map_err(|e| anyhow::anyhow!("invalid recipient address: {}", e))?;
+            Ok((&addr).into())
+        }
+    }
 }
