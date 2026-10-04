@@ -2,6 +2,7 @@
 name = "zk-lock-bound-sim"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 zk-lock-bound = { path = "../../contracts/zk-lock-bound", features = ["native-simulator"] }

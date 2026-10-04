@@ -107,3 +107,20 @@ Reference transactions built with the current SDK against the Poseidon-preimage-
 - `tests/`: integration tests over the built contract binary.
 - `native-simulators/zk-lock-sim/`: native-target simulator for the generic script.
 - `native-simulators/zk-lock-bound-sim/`: native-target simulator for the bound script.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, test, and pull request workflow.
+
+## License
+
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you shall be dual-licensed as above, without
+any additional terms or conditions.

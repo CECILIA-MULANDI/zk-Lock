@@ -13,6 +13,9 @@ members = [
   "native-simulators/zk-lock-bound-sim",
 ]
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 [profile.release]
 overflow-checks = true
 strip = false
