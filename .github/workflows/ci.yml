@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv64imac-unknown-none-elf
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      # ckb-std compiles the CKB C standard library from source, and the
+      # contract Makefile derives llvm-ar and llvm-objcopy from the clang
+      # path, so the whole LLVM toolchain has to be present.
+      - name: Install LLVM toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang llvm
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Build contracts and native simulators
+        run: make build
+
+      - name: Test
+        run: make test
+
+      - name: Clippy
+        run: make clippy CARGO_ARGS="-- -D warnings"
+
+  sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: sdk/ts/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # npm run e2e is excluded on purpose: it needs a funded Pudge key.
+      - name: Test
+        run: npm test

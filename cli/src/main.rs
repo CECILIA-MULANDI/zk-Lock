@@ -282,13 +282,8 @@ async fn main() -> anyhow::Result<()> {
             let recipient_script = parse_recipient(recipient.as_deref(), &sender)?;
             let pi_bytes = std::fs::read(&public_inputs).context("read pi file")?;
 
-            let scalar = context::compute_context(
-                cell,
-                contract_dep,
-                vk_dep,
-                &recipient_script,
-                &pi_bytes,
-            )?;
+            let scalar =
+                context::compute_context(cell, contract_dep, vk_dep, &recipient_script, &pi_bytes)?;
             let decimal = num_bigint::BigUint::from_bytes_le(&scalar);
             println!("context (hex):     0x{}", hex::encode(scalar));
             println!("context (decimal): {}", decimal);

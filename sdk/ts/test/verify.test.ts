@@ -13,7 +13,7 @@ import { verify } from "../src/verify.js";
 import { VK_HEADER } from "../src/decode.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const build = resolve(here, "../../../circuits/poseidon-preimage/build");
+const build = resolve(here, "fixtures");
 const readJson = (name: string) =>
   JSON.parse(readFileSync(resolve(build, name), "utf8"));
 
