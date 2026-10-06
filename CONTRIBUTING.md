@@ -70,7 +70,7 @@ The tutorial at [docs/tutorial.md](docs/tutorial.md) walks the whole path from a
 
 ## Pull requests
 
-- Keep `make build && make test` green locally. CI currently runs only the circuit vk_hash job, so nothing checks the build or the test suite for you yet.
+- Keep `make build && make test` green locally. CI will catch you otherwise: the `ci.yml` workflow runs `cargo fmt --check`, `make build`, `make test` and clippy with warnings denied, and builds, typechecks and tests the SDK. Locally is faster. `npm run e2e` is excluded from CI because it needs a funded Pudge key, so run that yourself if you touch the SDK's transaction building.
 - One concern per pull request. The witness layout, the CLI and the SDK can usually move independently.
 - Anything that changes the witness byte layout is a breaking change. It means a new contract binary, a fresh testnet deployment, new reference transactions, and updates to the tutorial and the SDK. Say so explicitly, because the README pins the currently deployed contract cells.
 - Negative tests are as welcome as features. If you can make a script accept something it should reject, that is the most useful contribution there is.
