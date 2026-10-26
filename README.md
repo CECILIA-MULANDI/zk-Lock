@@ -1,5 +1,8 @@
 # zk-Lock
 
+[![ci](https://github.com/CECILIA-MULANDI/zk-Lock/actions/workflows/ci.yml/badge.svg)](https://github.com/CECILIA-MULANDI/zk-Lock/actions/workflows/ci.yml)
+[![circuit-vk-hash](https://github.com/CECILIA-MULANDI/zk-Lock/actions/workflows/circuit-vk-hash.yml/badge.svg)](https://github.com/CECILIA-MULANDI/zk-Lock/actions/workflows/circuit-vk-hash.yml)
+
 A reusable CKB lock script that conditions cell spending on a valid Groth16 proof. Commit to a circuit's verifying key, lock CKB behind it, and unlock only by supplying a proof that satisfies the circuit.
 
 **New here?** Follow the [end-to-end tutorial](docs/tutorial.md). It walks from a Circom circuit to a locked and unlocked Pudge testnet cell using the TypeScript SDK or the Rust CLI.
@@ -13,12 +16,16 @@ Each locked cell carries two 32-byte commitments in its `lock.args`: a hash of t
 
 The on-chain script re-checks the public inputs commitment, then verifies the proof against the vk and inputs. No secp signature is required; the proof is the sole authorization.
 
+The byte layout of `witness.lock` and of the verifying key in cell data is specified in [docs/encoding-rationale.md](docs/encoding-rationale.md), which also covers why the encoding is flat and positional rather than Molecule, and which parts of that decision are still open.
+
 A transaction-binding sibling script lives at `contracts/zk-lock-bound/`. It reserves the first public input for a transaction-context scalar and constrains it on chain, which stops mempool witness-copy and recipient-redirect attacks against the generic script. See [Section 11 of the tutorial](docs/tutorial.md#11-transaction-binding-variant-recommended-for-production) for the end-to-end flow.
 
 ## Build
 
     make build
     cargo test
+
+CI runs `cargo fmt --check`, `make build`, `make test`, and clippy with warnings denied, then builds, typechecks, and tests the SDK. A second workflow rebuilds both Circom circuits from source, re-encodes the verifying key, and fails if the hash no longer matches the value pinned in `expected_vk_hash.txt`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full local workflow, including coverage and reproducible builds.
 
 ## CLI
 
@@ -104,6 +111,7 @@ Reference transactions built with the current SDK against the Poseidon-preimage-
 - `circuits/poseidon-preimage/`: reproducible Circom circuit used by the tutorial.
 - `circuits/poseidon-preimage-bound/`: bound-variant Circom circuit with a reserved context input.
 - `docs/tutorial.md`: end-to-end walkthrough from circuit to unlocked cell.
+- `docs/encoding-rationale.md`: the witness and vk byte layout, and the reasoning behind it.
 - `tests/`: integration tests over the built contract binary.
 - `native-simulators/zk-lock-sim/`: native-target simulator for the generic script.
 - `native-simulators/zk-lock-bound-sim/`: native-target simulator for the bound script.
