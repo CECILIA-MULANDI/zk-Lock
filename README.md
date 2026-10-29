@@ -5,7 +5,9 @@
 
 A reusable CKB lock script that conditions cell spending on a valid Groth16 proof. Commit to a circuit's verifying key, lock CKB behind it, and unlock only by supplying a proof that satisfies the circuit.
 
-**New here?** Follow the [end-to-end tutorial](docs/tutorial.md). It walks from a Circom circuit to a locked and unlocked Pudge testnet cell using the TypeScript SDK or the Rust CLI.
+**Not a developer?** Read [zk-Lock explained without code](docs/explainer.md). It covers what this does and why it is useful, with no code and no CKB background assumed, and it is honest about the limits.
+
+**New here and want to build?** Follow the [end-to-end tutorial](docs/tutorial.md). It walks from a Circom circuit to a locked and unlocked Pudge testnet cell using the TypeScript SDK or the Rust CLI.
 
 ## How it works
 
