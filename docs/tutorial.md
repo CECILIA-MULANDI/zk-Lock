@@ -523,7 +523,9 @@ Pass `--recipient <address>` to send the unlocked funds to a different address; 
 
 If you build unlock transactions with a different first-output layout than `context-hash` assumed (different fee rate, different data, non-empty type script), the on-chain check will fail. That is the intended behavior: the binding is only as tight as the tx layout you agree to.
 
-The SDK exposes the same operations as `lockBound`, `unlockBound`, and `computeContextHash` in `sdk/ts/src/ckb.ts`.
+The SDK covers the same flow in `sdk/ts/src/ckb.ts`, deliberately as two halves that hand state to each other. `computeContextHash` returns a `BoundPlan`: the context scalar to prove against, plus the exact output capacity and fee it assumed when computing it. `unlockBound` takes that plan back and refuses to send if the transaction it would build no longer matches, so a drifting fee fails locally instead of being rejected on chain. `planBoundUnlock` and `buildBoundUnlockTx` are the pure halves of each, if you want to assert in a test that the two agree.
+
+Note that `unlockBound` takes a client and an explicit recipient rather than a signer. A bound unlock needs no signature and no funded wallet, because the fee comes out of the locked cell's own capacity; and the recipient is hashed into the proof, so it has to be chosen before proving rather than read off a wallet at send time.
 
 ## 12. Troubleshooting
 

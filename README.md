@@ -74,7 +74,7 @@ For the transaction-binding variant, use `lock-bound` / `unlock-bound` in place 
 
 ## TypeScript SDK
 
-`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `unlockBound`, and `computeContextHash` for the transaction-binding variant. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
+`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `computeContextHash`, `unlockBound`, and the pure `planBoundUnlock` and `buildBoundUnlockTx` for the transaction-binding variant. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
 
 ## Pudge testnet
 
@@ -97,7 +97,7 @@ Reference transactions built with the current SDK against the Poseidon-preimage 
 - Contract `code_hash` (type): `0x0e366b1b48b88054474a91c7c6487b1edf1a33f25be1622678deab68d5166872`
 - Poseidon-preimage-bound vk cell (used by Section 11 of the tutorial): `0x2adb611b833126ec59234cb8e8645a2da91209fb4450187427fdbf5dc6dad1b9:0`
 
-Reference transactions built with the current SDK against the Poseidon-preimage-bound circuit:
+Reference transactions built with the Rust CLI against the Poseidon-preimage-bound circuit:
 
 - Lock: [`0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360`](https://pudge.explorer.nervos.org/transaction/0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360)
 - Unlock: [`0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c`](https://pudge.explorer.nervos.org/transaction/0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c)
