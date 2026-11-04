@@ -6,8 +6,11 @@ license.workspace = true
 
 [dependencies]
 ckb-std = "1.1"
-blake2b-ref = "0.3"
-verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
+zk-lock-core = { path = "../../crates/zk-lock-core" }
 [features]
 library = []
-native-simulator = ["library", "ckb-std/native-simulator"]
+native-simulator = [
+  "library",
+  "ckb-std/native-simulator",
+  "zk-lock-core/native-simulator",
+]

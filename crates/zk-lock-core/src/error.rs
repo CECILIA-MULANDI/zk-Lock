@@ -1,5 +1,13 @@
 use ckb_std::error::SysError;
 
+/// Exit codes for both zk-Lock scripts.
+///
+/// The discriminants are consensus-visible: they are the `i8` a failing
+/// transaction reports, and tooling matches on them. Add variants at the end,
+/// never renumber. [`ContextMismatch`](Error::ContextMismatch) and
+/// [`PublicInputCountTooSmall`](Error::PublicInputCountTooSmall) can only be
+/// returned under [`Binding::Transaction`](crate::Binding::Transaction), but
+/// they live here so one enum describes both scripts.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 #[repr(i8)]
 pub enum Error {

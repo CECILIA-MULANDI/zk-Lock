@@ -104,8 +104,9 @@ Reference transactions built with the current SDK against the Poseidon-preimage-
 
 ## Repository layout
 
-- `contracts/zk-lock/`: the on-chain lock script.
-- `contracts/zk-lock-bound/`: transaction-binding sibling script.
+- `crates/zk-lock-core/`: the spend check both scripts run, and the error codes they share.
+- `contracts/zk-lock/`: on-chain binary for the generic mode.
+- `contracts/zk-lock-bound/`: on-chain binary for the transaction-binding mode.
 - `cli/`: command-line tool for encoding, deploying, locking, and unlocking.
 - `sdk/ts/`: TypeScript SDK covering the same off-chain surface as the CLI.
 - `circuits/poseidon-preimage/`: reproducible Circom circuit used by the tutorial.
