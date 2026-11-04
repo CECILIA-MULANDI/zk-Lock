@@ -23,7 +23,7 @@ const BOUND_VK_BYTES: &[u8] = include_bytes!("../fixtures/bound/vk.bin");
 const BOUND_PROOF_BYTES: &[u8] = include_bytes!("../fixtures/bound/proof.bin");
 const BOUND_PI_BYTES: &[u8] = include_bytes!("../fixtures/bound/public_inputs.bin");
 
-// Error discriminants from contracts/zk-lock-bound/src/error.rs.
+// Error discriminants from crates/zk-lock-core/src/error.rs.
 // Asserting these matters here: every tx in this file carries a dummy proof,
 // so verify_tx fails no matter what. Without pinning the code, a test would
 // still pass if the check it targets were deleted from the script.

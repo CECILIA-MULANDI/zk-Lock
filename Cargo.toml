@@ -11,6 +11,7 @@ members = [
   "cli",
   "contracts/zk-lock-bound",
   "native-simulators/zk-lock-bound-sim",
+  "crates/zk-lock-core",
 ]
 
 [workspace.package]
