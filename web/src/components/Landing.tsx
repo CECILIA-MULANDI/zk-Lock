@@ -107,6 +107,66 @@ export function Landing() {
         </div>
       </section>
 
+      {/*
+        The section above says how a proof works. A reader who already knows
+        what a lock script is will stop here and ask why a signature would not
+        do, and that question is fair enough that the page has to answer it
+        rather than hope nobody asks.
+      */}
+      <section className={`${SHELL} flex flex-col gap-12 py-[104px]`}>
+        <div className="grid items-end gap-x-16 gap-y-6 lg:grid-cols-2">
+          <h2 className="font-display text-section font-extrabold">
+            Why not an ordinary lock?
+          </h2>
+          <p className="max-w-[640px] text-lead text-body">
+            Every lock on a blockchain asks a question before it opens. An
+            ordinary one can ask only a single question, and it is always the
+            same question.
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="flex flex-col gap-3.5 rounded-2xl border border-hairline bg-white p-7">
+            <span className="font-mono text-micro tracking-[0.14em] text-muted uppercase">
+              An ordinary lock
+            </span>
+            <h3 className="font-display text-card font-bold">
+              Did the right key sign?
+            </h3>
+            <p className="text-copy text-soft">
+              That is the only thing it can ask. Whoever holds the key can
+              spend, and the chain sees your public key and your signature. To
+              prove you are allowed, you show the very thing that makes you
+              allowed.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3.5 rounded-2xl border border-cool-edge bg-surface p-7">
+            <span className="font-mono text-micro tracking-[0.14em] text-public uppercase">
+              zk-Lock
+            </span>
+            <h3 className="font-display text-card font-bold text-public">
+              Whatever you can write down
+            </h3>
+            <p className="text-copy text-soft">
+              Do they know a password? Are they on this list? Is this batch of
+              trades valid? The lock checks 128 bytes of proof and learns only
+              that the answer was yes. Whatever made the answer yes never leaves
+              your machine.
+            </p>
+          </div>
+        </div>
+
+        <p className="max-w-[760px] text-copy text-muted">
+          A secret word is the smallest example that fits in a browser tab. It
+          is not the best argument for any of this: if a word were all you
+          needed, you could use it as a private key and skip the mathematics
+          entirely. The argument is the question. Change the circuit and the
+          lock asks something a signature cannot express, while still revealing
+          nothing but the answer.
+        </p>
+      </section>
+
       <section className={`${SHELL} py-24`}>
         <div className="flex flex-wrap items-center justify-between gap-8 rounded-[20px] bg-ink p-14 text-paper">
           <div className="flex flex-[1_1_420px] flex-col gap-3">
