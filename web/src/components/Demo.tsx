@@ -54,9 +54,15 @@ export function Demo() {
           </p>
         </div>
 
+        {/*
+          What happens next is a promise about the three sections below it, so
+          it retires once they are on screen. Leaving it up puts a second
+          numbered list next to RuleTrace and a table of contents next to the
+          thing it was a table of contents for.
+        */}
         <div className="flex flex-wrap items-stretch gap-6">
           <SecretForm busy={busy} onSubmit={prove} />
-          <WhatHappensNext locked={!attempt && !busy} />
+          {!attempt && <WhatHappensNext locked={!busy} />}
         </div>
 
         {error && (
