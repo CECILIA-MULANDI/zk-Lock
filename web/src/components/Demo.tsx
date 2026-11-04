@@ -40,7 +40,7 @@ export function Demo() {
       <main className={`${SHELL} flex flex-col gap-12 pt-18 pb-16`}>
         <div className="flex flex-wrap items-end justify-between gap-x-16 gap-y-6">
           <div className="flex min-w-0 flex-[1_1_560px] flex-col gap-4.5">
-            <p className="font-mono text-micro tracking-[0.14em] text-muted uppercase">
+            <p className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
               zk-Lock on Pudge testnet
             </p>
             <h1 className="font-display text-title font-extrabold">
@@ -86,7 +86,7 @@ export function Demo() {
 
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-8 gap-y-6 border-t border-hairline pt-8">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro tracking-[0.12em] text-muted uppercase">
+            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
               Contract cell
             </dt>
             <dd className="font-mono text-note [overflow-wrap:anywhere]">
@@ -101,7 +101,7 @@ export function Demo() {
             </dd>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro tracking-[0.12em] text-muted uppercase">
+            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
               code_hash (type)
             </dt>
             <dd className="font-mono text-note text-body [overflow-wrap:anywhere]">
@@ -109,12 +109,14 @@ export function Demo() {
             </dd>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro tracking-[0.12em] text-muted uppercase">
+            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
               Status
             </dt>
             <dd className="text-note text-body">
               Groth16 proof checked by a CKB lock script. Not audited, test
-              funds only.{" "}
+              funds only. This is the generic lock; the transaction-binding
+              variant ties a proof to one specific transaction and is covered
+              in the tutorial.{" "}
               <a
                 href={REPO_URL}
                 target="_blank"

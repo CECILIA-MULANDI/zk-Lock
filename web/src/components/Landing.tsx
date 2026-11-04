@@ -8,19 +8,19 @@ const STEPS = [
     n: "01",
     title: "You know a word",
     body: "You type it on your own machine. It goes no further than the page you are looking at.",
-    chip: "bg-private-tint text-private",
+    chip: "bg-private text-white",
   },
   {
     n: "02",
     title: "Your browser builds a proof",
     body: "A short piece of evidence, worked out from the word. It takes a moment, and it happens entirely on your side.",
-    chip: "bg-public-tint text-public",
+    chip: "bg-ink text-on-ink",
   },
   {
     n: "03",
     title: "Anyone can check it",
-    body: "The proof convinces them you knew the word. It tells them nothing about what the word was, and it cannot be run backwards.",
-    chip: "bg-public text-paper",
+    body: "The proof itself carries nothing about the word. The fingerprint is public though, so a long random secret stays secret and a short dictionary word like this one could be guessed from it.",
+    chip: "bg-public text-white",
   },
 ];
 
@@ -32,23 +32,23 @@ export function Landing() {
       <Nav view="landing" />
 
       <section
-        className={`${SHELL} flex flex-wrap items-center gap-16 pt-24 pb-28`}
+        className={`${SHELL} flex flex-wrap items-center gap-[clamp(48px,6vw,120px)] pt-28 pb-30`}
       >
-        <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-7">
-          <p className="font-mono text-micro tracking-[0.14em] text-muted uppercase">
+        <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-7">
+          <p className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
             A demo on the Nervos CKB test network
           </p>
           <h1 className="font-display text-hero font-extrabold">
-            Some locks never see the key
+            Some locks check a rule, not a key
           </h1>
-          <p className="max-w-[620px] text-lead text-body">
+          <p className="max-w-[38ch] text-lead text-body">
             This one opens for anyone who can prove they know a secret word,
             without ever saying the word.
           </p>
           <div className="flex flex-wrap items-center gap-5 pt-2">
             <a
               href="#try"
-              className="inline-flex min-h-[52px] items-center gap-2.5 rounded-[10px] bg-public px-[26px] text-copy font-semibold text-paper transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2.5 rounded-lg bg-public px-[22px] py-3 text-copy font-semibold text-white transition-colors hover:bg-ink"
             >
               Try it
               <ArrowRight />
@@ -62,45 +62,41 @@ export function Landing() {
         <BoundaryCard />
       </section>
 
-      <section
-        id="how"
-        className="scroll-mt-4 border-y border-band-edge bg-surface"
-      >
-        <div className={`${SHELL} flex flex-col gap-14 py-[104px]`}>
-          <div className="grid items-end gap-x-16 gap-y-6 lg:grid-cols-2">
-            <h2 className="font-display text-section font-extrabold">
+      {/*
+        The steps are one panel divided, not three cards floating. Three cards
+        with air between them read as three unrelated facts; one panel split by
+        rules reads as a single sequence, which is what a numbered list is.
+      */}
+      <section id="how" className="scroll-mt-4 bg-public">
+        <div className={`${SHELL} flex flex-col gap-10 py-28`}>
+          <div className="flex flex-col gap-6">
+            <h2 className="font-display text-section font-extrabold text-white">
               How that's possible
             </h2>
-            <p className="max-w-[640px] text-lead text-body">
-              Normally, proving you know a password means typing it in, and
-              whoever checked it now knows your password too. There is a kind of
-              mathematics that avoids that.
+            <p className="max-w-[760px] text-intro text-on-teal">
+              Your word has a fingerprint, and it is public. Anyone can see
+              that some word matching it exists, and that was never in question.
+              The question is whether you are someone who has that word. A proof
+              is a short piece of evidence that settles it, without showing the
+              word.
             </p>
           </div>
 
-          <ol className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-5">
+          <ol className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] overflow-hidden rounded-[14px] bg-white">
             {STEPS.map((step) => (
               <li
                 key={step.n}
-                className="flex flex-col gap-3.5 rounded-2xl border border-cool-edge bg-white p-7"
+                className="flex flex-col gap-3.5 p-[clamp(28px,2.4vw,40px)] not-first:border-public lg:not-first:border-l-2"
               >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-full font-mono text-micro font-semibold ${step.chip}`}
-                  >
-                    {step.n}
-                  </span>
-                  <span
-                    className="h-px flex-1 bg-cool-edge"
-                    aria-hidden="true"
-                  />
-                </div>
+                <span
+                  className={`flex size-[30px] shrink-0 items-center justify-center rounded-full font-mono text-micro font-medium ${step.chip}`}
+                >
+                  {step.n}
+                </span>
                 <h3 className="font-display text-card font-bold">
                   {step.title}
                 </h3>
-                <p className="text-copy text-soft">
-                  {step.body}
-                </p>
+                <p className="text-copy text-soft">{step.body}</p>
               </li>
             ))}
           </ol>
@@ -113,88 +109,83 @@ export function Landing() {
         do, and that question is fair enough that the page has to answer it
         rather than hope nobody asks.
       */}
-      <section className={`${SHELL} flex flex-col gap-12 py-[104px]`}>
-        <div className="grid items-end gap-x-16 gap-y-6 lg:grid-cols-2">
+      <section className={`${SHELL} flex flex-col gap-10 py-28`}>
+        <div className="flex flex-col gap-6">
           <h2 className="font-display text-section font-extrabold">
             Why not an ordinary lock?
           </h2>
-          <p className="max-w-[640px] text-lead text-body">
-            Every lock on a blockchain asks a question before it opens. An
-            ordinary one can ask only a single question, and it is always the
-            same question.
+          <p className="max-w-[760px] text-intro text-body">
+            Every lock asks a question before it opens. Say ten thousand people
+            are allowed to open this one. Watch what each kind of lock has to
+            make you give up.
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="flex flex-col gap-3.5 rounded-2xl border border-hairline bg-white p-7">
-            <span className="font-mono text-micro tracking-[0.14em] text-muted uppercase">
-              An ordinary lock
-            </span>
-            <h3 className="font-display text-card font-bold">
-              Did the right key sign?
-            </h3>
-            <p className="text-copy text-soft">
-              That is the only thing it can ask. Whoever holds the key can
-              spend, and the chain sees your public key and your signature. To
-              prove you are allowed, you show the very thing that makes you
-              allowed.
-            </p>
+        {/*
+          One bordered panel, two halves, because the point is the comparison
+          and not either side on its own. The closing note runs along the
+          bottom inside the same border: it qualifies both halves, so it should
+          not look like a third opinion sitting outside them.
+        */}
+        <div className="overflow-hidden rounded-[14px] border-2 border-ink">
+          <div className="grid lg:grid-cols-[repeat(2,minmax(340px,1fr))]">
+            <div className="flex flex-col gap-3.5 bg-white p-[clamp(28px,2.4vw,40px)]">
+              <span className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+                Signature
+              </span>
+              <h3 className="font-display text-card font-bold">
+                You prove which one you are
+              </h3>
+              <p className="text-copy text-soft">
+                You sign with your key and the chain keeps it. Anyone looking
+                can now see which of the ten thousand opened the cell, and that
+                you were on the list at all. To show you are allowed, you hand
+                over the very thing that makes you allowed.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3.5 bg-public p-[clamp(28px,2.4vw,40px)]">
+              <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-teal-label uppercase">
+                Proof
+              </span>
+              <h3 className="font-display text-card font-bold text-white">
+                You prove you are one of them
+              </h3>
+              <p className="text-copy text-on-teal">
+                You show that your entry is somewhere in the list without saying
+                which entry is yours. The lock checks 128 bytes and learns one
+                thing: somebody eligible opened it. Which somebody is not in the
+                bytes, and cannot be worked out from them.
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-3.5 rounded-2xl border border-cool-edge bg-surface p-7">
-            <span className="font-mono text-micro tracking-[0.14em] text-public uppercase">
-              zk-Lock
-            </span>
-            <h3 className="font-display text-card font-bold text-public">
-              Whatever you can write down
-            </h3>
-            <p className="text-copy text-soft">
-              Do they know a password? Are they on this list? Is this batch of
-              trades valid? The lock checks 128 bytes of proof and learns only
-              that the answer was yes. Whatever made the answer yes never leaves
-              your machine.
-            </p>
-          </div>
+          <p className="bg-ink px-[clamp(28px,2.4vw,40px)] py-7 text-copy text-on-ink-soft">
+            An allowlist is one circuit. Change the circuit and the lock asks
+            something else: over eighteen, a winning sealed bid, a valid batch
+            of trades. The secret word in this demo is simply the smallest
+            circuit that fits in a browser tab, which is the only reason it is
+            the one you get to try.
+          </p>
         </div>
-
-        <p className="max-w-[760px] text-copy text-muted">
-          A secret word is the smallest example that fits in a browser tab. It
-          is not the best argument for any of this: if a word were all you
-          needed, you could use it as a private key and skip the mathematics
-          entirely. The argument is the question. Change the circuit and the
-          lock asks something a signature cannot express, while still revealing
-          nothing but the answer.
-        </p>
       </section>
 
-      <section className={`${SHELL} py-24`}>
-        <div className="flex flex-wrap items-center justify-between gap-8 rounded-[20px] bg-ink p-14 text-paper">
-          <div className="flex flex-[1_1_420px] flex-col gap-3">
-            {/* With an empty pool there is no cell behind the word, and the
-                result panel says so. This must not contradict it. */}
-            <h2 className="font-display text-feature font-extrabold">
-              {funded ? (
-                <>
-                  There's real CKB behind a word.
-                  <br />
-                  Go open it.
-                </>
-              ) : (
-                <>
-                  Build a real proof.
-                  <br />
-                  See exactly what gets sent.
-                </>
-              )}
-            </h2>
-            <p className="text-copy text-dark-muted">
-              The demo word is public on purpose. Try a wrong one too, and watch
-              the lock hold.
-            </p>
-          </div>
+      <section className={`${SHELL} pb-28`}>
+        <div className="flex flex-col gap-6 rounded-[14px] bg-private p-[clamp(40px,5vw,80px)]">
+          {/* With an empty pool there is no cell behind the word, and the
+              result panel says so. This must not contradict it. */}
+          <h2 className="font-display text-feature font-extrabold text-white">
+            {funded
+              ? "There's real CKB behind a word. Go open it."
+              : "Build a real proof. See exactly what gets sent."}
+          </h2>
+          <p className="max-w-[640px] text-copy text-on-rust">
+            The demo word is public on purpose. Try a wrong one too, and watch
+            the lock hold.
+          </p>
           <a
             href="#try"
-            className="inline-flex min-h-[52px] items-center gap-2.5 rounded-[10px] bg-paper px-[26px] text-copy font-semibold text-ink transition-opacity hover:opacity-90"
+            className="inline-flex w-fit items-center gap-2.5 rounded-lg bg-white px-[22px] py-3 text-copy font-semibold text-ink transition-colors hover:bg-ink hover:text-paper"
           >
             Try it
             <ArrowRight />
@@ -202,9 +193,9 @@ export function Landing() {
         </div>
       </section>
 
-      <footer className="border-t border-hairline">
+      <footer className="bg-ink">
         <div
-          className={`${SHELL} flex flex-wrap justify-between gap-x-8 gap-y-4 py-8 text-note text-muted`}
+          className={`${SHELL} flex flex-wrap justify-between gap-x-8 gap-y-4 py-8 text-note text-on-ink-soft`}
         >
           <span>
             A CKB lock script that checks a Groth16 proof. Not audited. Test
@@ -214,7 +205,7 @@ export function Landing() {
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
-            className="text-public"
+            className="text-footer-link"
           >
             Source, tutorial and CLI on GitHub
           </a>
