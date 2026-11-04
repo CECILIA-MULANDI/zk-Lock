@@ -44,7 +44,7 @@ export function ProvingTrace({ stage }: { stage: Stage }) {
     <section
       aria-live="polite"
       aria-label="Proof progress"
-      className="rounded-xl border border-hairline bg-surface p-6 sm:p-8"
+      className="rounded-[14px] border-2 border-ink bg-white p-[clamp(28px,2.4vw,40px)]"
     >
       <ol className="space-y-4">
         {STAGES.map((item, index) => {

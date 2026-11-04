@@ -48,13 +48,13 @@ export function LockGlyph({
 
 export function Nav({ view }: { view: "landing" | "demo" }) {
   return (
-    <header className="border-b border-hairline">
+    <header className="bg-ink text-on-ink">
       <div
         className={`${SHELL} flex flex-wrap items-center justify-between gap-4 py-[18px]`}
       >
-        <a href="#" className="flex items-center gap-2.5 text-ink">
+        <a href="#" className="flex items-center gap-2.5 text-paper">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-public">
-            <LockGlyph stroke="#FBFAF6" />
+            <LockGlyph stroke="#F4F1EA" />
           </span>
           <span className="font-display text-lead font-bold tracking-[-0.01em]">
             zk-Lock
@@ -64,11 +64,11 @@ export function Nav({ view }: { view: "landing" | "demo" }) {
         <nav className="flex flex-wrap items-center gap-6 text-note">
           <a
             href={view === "demo" ? "#" : "#how"}
-            className="text-body hover:text-ink"
+            className="text-on-ink hover:text-paper"
           >
             {view === "demo" ? "What is this?" : "How it works"}
           </a>
-          <span className="flex items-center gap-2 rounded-full bg-public-pill px-2.5 py-1.5 font-mono text-micro text-public">
+          <span className="flex items-center gap-2 rounded-full bg-public px-2.5 py-1.5 font-mono text-micro text-on-teal-label">
             <span
               className="size-[7px] rounded-full bg-dot"
               aria-hidden="true"
