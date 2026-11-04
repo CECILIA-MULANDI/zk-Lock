@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+/* Colour here is semantics, not decoration: the `private` family never leaves
+   the browser, the `public` family goes on chain. Keep that split intact.
+   `held` is deliberately not red; a rejected proof is the lock working. */
+@theme {
+  /* Ground and text. `paper`, not `base`: Tailwind already ships `text-base`
+     as a font size, so a `--color-base` token would collide with it. */
+  --color-paper: #fbfaf6;
+  --color-ink: #141b1a;
+  --color-body: #3f4846;
+  --color-muted: #56605e;
+  --color-soft: #4a5452;
+
+  /* Public: on-chain data, and the one action colour. */
+  --color-public: #165f5e;
+  --color-public-deep: #0e4544;
+  --color-public-tint: #e2ecea;
+  --color-public-pill: #e6efee;
+  --color-cool-soft: #3f5f5c;
+  --color-dot: #1f8a78;
+
+  /* Private: the secret, and anything that stays in the browser. */
+  --color-private: #9a3d17;
+  --color-private-ink: #7a3412;
+  --color-private-soft: #8a4a2e;
+  --color-private-help: #6b3a24;
+  --color-private-tint: #f7ede7;
+  --color-private-paper: #fffbf8;
+  --color-private-edge: #ebd3c6;
+  --color-private-edge-strong: #e0bba7;
+
+  /* Surfaces and edges. */
+  --color-surface: #edf2f1;
+  --color-hairline: #e4e6e2;
+  --color-edge: #dde2df;
+  --color-cool-edge: #d6e0de;
+  --color-cool-edge-soft: #cfdcda;
+  --color-band-edge: #dde5e3;
+  --color-rule: #b9c6c3;
+  --color-step-edge: #74918c;
+  --color-dark-muted: #b8c2c0;
+
+  /* Result states, outside the artboards' scope. */
+  --color-pass: #2a6b42;
+  --color-held: #55526b;
+
+  --font-display: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* The type scale. Steps are named for the job they do, and there is one step
+     per level with nothing in between: sizes a step or two apart read as one
+     level, not three. If something does not fit a step it is the wrong level,
+     not a missing size. The four largest come from the artboards. */
+  --text-hero: clamp(52px, 7vw, 92px);
+  --text-hero--line-height: 0.95;
+  --text-hero--letter-spacing: -0.045em;
+
+  --text-title: clamp(44px, 5.5vw, 68px);
+  --text-title--line-height: 0.98;
+  --text-title--letter-spacing: -0.04em;
+
+  --text-section: clamp(36px, 4.5vw, 52px);
+  --text-section--line-height: 1;
+  --text-section--letter-spacing: -0.035em;
+
+  --text-feature: 2.5rem; /* 40px: a heading inside a band, not spanning one */
+  --text-feature--line-height: 1.05;
+  --text-feature--letter-spacing: -0.03em;
+
+  /* Sections of the Prove page are siblings and all sit here. */
+  --text-panel: 1.75rem; /* 28px */
+  --text-panel--line-height: 1.15;
+  --text-panel--letter-spacing: -0.02em;
+
+  --text-card: 1.5rem; /* 24px: the title of a card */
+  --text-card--line-height: 1.2;
+  --text-card--letter-spacing: -0.01em;
+
+  --text-lead: 1.25rem; /* 20px: the one paragraph that opens a screen */
+  --text-lead--line-height: 1.5;
+
+  --text-copy: 1.0625rem; /* 17px: prose, and anything a visitor must read */
+  --text-copy--line-height: 1.6;
+
+  --text-note: 0.9375rem; /* 15px: help text, captions, short mono values */
+  --text-note--line-height: 1.55;
+
+  /* The floor, mono only: eyebrows, chips, hex dumps. Never prose. */
+  --text-micro: 0.75rem; /* 12px */
+  --text-micro--line-height: 1.35;
+}
+
+/* Guarded: a long animated scroll is exactly what reduce-motion turns off. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #9cc4bf;
+  outline-offset: 1px;
+}
+
+/* Monospace is reserved for on-chain data: hex, hashes, field names, tx
+   hashes. Nothing else, so the typeface itself means "machine data". */
