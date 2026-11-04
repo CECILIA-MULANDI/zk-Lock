@@ -18,8 +18,21 @@ import type { UnlockResult } from "../lib/unlock";
  */
 const SHANNONS_PER_CKB = 100_000_000n;
 
-const ckb = (shannons: bigint) =>
-  `${(Number(shannons) / Number(SHANNONS_PER_CKB)).toFixed(4)} CKB`;
+/**
+ * Exact, in integer arithmetic, to 8 decimals with trailing zeros trimmed.
+ *
+ * A fixed 4 decimals printed a real fee of 0.00000731 CKB as "0.0000", right
+ * below the sentence saying the fee came out of the cell. Going through Number
+ * would also lose precision on a capacity large enough to matter.
+ */
+const ckb = (shannons: bigint) => {
+  const whole = shannons / SHANNONS_PER_CKB;
+  const frac = (shannons % SHANNONS_PER_CKB)
+    .toString()
+    .padStart(8, "0")
+    .replace(/0+$/, "");
+  return `${whole}${frac ? `.${frac}` : ""} CKB`;
+};
 
 function Commitment({ label, value }: { label: string; value: string }) {
   return (
