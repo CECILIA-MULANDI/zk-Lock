@@ -37,7 +37,7 @@ const ckb = (shannons: bigint) => {
 function Commitment({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="font-mono text-micro tracking-[0.12em] text-muted uppercase">
+      <p className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
         {label}
       </p>
       <p className="mt-2 font-mono text-note break-all">{value}</p>
@@ -56,7 +56,7 @@ export function LockCheck({ attempt }: { attempt: Attempt }) {
 
   if (!matches) {
     return (
-      <section className="rounded-xl border border-held/30 bg-held/7 p-6 sm:p-8">
+      <section className="rounded-[14px] border-2 border-ink bg-white p-[clamp(28px,2.4vw,40px)]">
         <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div>
             <h2 className="font-display text-panel font-bold text-held">
@@ -93,7 +93,7 @@ export function LockCheck({ attempt }: { attempt: Attempt }) {
 
   if (DEMO_CELLS.length === 0) {
     return (
-      <section className="rounded-xl border border-hairline bg-surface p-6 sm:p-8">
+      <section className="rounded-[14px] border-2 border-ink bg-white p-[clamp(28px,2.4vw,40px)]">
         <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div>
             <h2 className="font-display text-panel font-bold">
@@ -125,7 +125,7 @@ export function LockCheck({ attempt }: { attempt: Attempt }) {
 
   if (result) {
     return (
-      <section className="rounded-xl border border-pass/30 bg-pass/7 p-6 sm:p-8">
+      <section className="rounded-[14px] border-2 border-public bg-white p-[clamp(28px,2.4vw,40px)]">
         <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div>
             <h2 className="font-display text-panel font-bold text-pass">
@@ -176,7 +176,7 @@ export function LockCheck({ attempt }: { attempt: Attempt }) {
   }
 
   return (
-    <section className="rounded-xl border border-hairline bg-surface p-6 sm:p-8">
+    <section className="rounded-[14px] border-2 border-ink bg-white p-[clamp(28px,2.4vw,40px)]">
       <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>
           <h2 className="font-display text-panel font-bold">

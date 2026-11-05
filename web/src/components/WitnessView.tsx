@@ -37,36 +37,36 @@ export function WitnessView({ attempt }: { attempt: Attempt }) {
   return (
     <section className="grid gap-8 lg:grid-cols-[24rem_minmax(0,1fr)] 2xl:grid-cols-[30rem_minmax(0,1fr)]">
       <div className="lg:sticky lg:top-8 lg:self-start">
-        <div className="rounded-xl border border-private/30 bg-private/7 p-6">
-          <span className="font-mono text-micro font-semibold tracking-[0.14em] text-private uppercase">
+        <div className="rounded-[14px] bg-private p-[clamp(28px,2.4vw,40px)]">
+          <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-rust uppercase">
             Stays with you
           </span>
-          <h2 className="mt-3 font-display text-card font-bold text-private">
+          <h2 className="mt-3 font-display text-card font-bold text-white">
             Your secret
           </h2>
-          <p className="mt-4 font-mono text-panel break-all text-private">
+          <p className="mt-4 font-mono text-panel break-all text-white">
             {attempt.word}
           </p>
-          <span className="mt-4 inline-block rounded-full bg-private/15 px-3 py-1.5 text-micro font-semibold text-private">
+          <span className="mt-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-micro font-semibold text-on-rust">
             Never leaves this page
           </span>
 
-          <dl className="mt-5 space-y-3 border-t border-private/20 pt-5 text-note">
+          <dl className="mt-5 space-y-3 border-t border-on-rust/30 pt-5 text-note">
             <div>
-              <dt className="text-muted">As a field element</dt>
-              <dd className="mt-1 font-mono break-all text-private">
+              <dt className="text-on-rust/80">As a field element</dt>
+              <dd className="mt-1 font-mono break-all text-white">
                 {attempt.field.toString()}
               </dd>
             </div>
             <div>
-              <dt className="text-muted">As bytes</dt>
-              <dd className="mt-1 font-mono break-all text-private">
+              <dt className="text-on-rust/80">As bytes</dt>
+              <dd className="mt-1 font-mono break-all text-white">
                 {paddedFieldHex}
               </dd>
             </div>
           </dl>
 
-          <p className="mt-5 text-copy text-muted">
+          <p className="mt-5 text-copy text-on-rust">
             This is the circuit's private input. It is read here, used to build
             the proof, and then thrown away. No request carries it.
           </p>
