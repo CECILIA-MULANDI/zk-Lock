@@ -1,3 +1,4 @@
+import { PI_PREFIX_LEN, FR_LEN, PROOF_LEN } from "../lib/prove";
 import type { Stage } from "../lib/prove";
 
 const STAGES: ReadonlyArray<{ id: Stage; label: string; detail: string }> = [
@@ -24,7 +25,7 @@ const STAGES: ReadonlyArray<{ id: Stage; label: string; detail: string }> = [
   {
     id: "encoding",
     label: "Encoding the bytes that go on chain",
-    detail: "128 bytes of proof plus 36 of public input",
+    detail: `${PROOF_LEN} bytes of proof plus ${PI_PREFIX_LEN + FR_LEN} of public input`,
   },
 ];
 
@@ -44,7 +45,7 @@ export function ProvingTrace({ stage }: { stage: Stage }) {
     <section
       aria-live="polite"
       aria-label="Proof progress"
-      className="rounded-xl border border-hairline bg-surface p-6 sm:p-8"
+      className="rounded-[14px] border-2 border-ink bg-white p-[clamp(28px,2.4vw,40px)]"
     >
       <ol className="space-y-4">
         {STAGES.map((item, index) => {
