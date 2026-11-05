@@ -20,7 +20,7 @@ The on-chain script re-checks the public inputs commitment, then verifies the pr
 
 The byte layout of `witness.lock` and of the verifying key in cell data is specified in [docs/encoding-rationale.md](docs/encoding-rationale.md), which also covers why the encoding is flat and positional rather than Molecule, and which parts of that decision are still open.
 
-A transaction-binding sibling script lives at `contracts/zk-lock-bound/`. It reserves the first public input for a transaction-context scalar and constrains it on chain, which stops mempool witness-copy and recipient-redirect attacks against the generic script. See [Section 11 of the tutorial](docs/tutorial.md#11-transaction-binding-variant-recommended-for-production) for the end-to-end flow.
+The check above runs in two binding modes, not as two lock designs. `contracts/zk-lock/` and `contracts/zk-lock-bound/` are the same spend check from `crates/zk-lock-core/`, called with `Binding::None` and `Binding::Transaction`. Binding adds one check and removes none: it reserves the first public input for a transaction-context scalar and constrains it on chain, which stops mempool witness-copy and recipient-redirect attacks. Because the two modes need different circuits, a proof made for one is never accepted by the other. See [Section 11 of the tutorial](docs/tutorial.md#11-transaction-binding-recommended-for-production) for the end-to-end flow.
 
 ## Build
 
@@ -68,7 +68,7 @@ Unlock the cell by presenting the proof:
 
 `<cell>`, `<contract_dep>`, and `<vk_dep>` are OutPoints in `tx_hash:index` form.
 
-For the transaction-binding variant, use `lock-bound` / `unlock-bound` in place of `lock` / `unlock`, and derive the tx-context scalar with `context-hash` before re-proving:
+Under transaction binding, use `lock-bound` / `unlock-bound` in place of `lock` / `unlock`, and derive the tx-context scalar with `context-hash` before re-proving:
 
     cargo run -p cli --release -- lock-bound   <code_hash> <vk_hash> <pi_commitment_body> <capacity>
     cargo run -p cli --release -- context-hash <cell> <contract_dep> <vk_dep> <public_inputs>
@@ -76,7 +76,7 @@ For the transaction-binding variant, use `lock-bound` / `unlock-bound` in place 
 
 ## TypeScript SDK
 
-`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `computeContextHash`, `unlockBound`, and the pure `planBoundUnlock` and `buildBoundUnlockTx` for the transaction-binding variant. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
+`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `computeContextHash`, `unlockBound`, and the pure `planBoundUnlock` and `buildBoundUnlockTx` for the transaction-binding mode. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
 
 ## Pudge testnet
 
@@ -112,7 +112,7 @@ Reference transactions built with the Rust CLI against the Poseidon-preimage-bou
 - `cli/`: command-line tool for encoding, deploying, locking, and unlocking.
 - `sdk/ts/`: TypeScript SDK covering the same off-chain surface as the CLI.
 - `circuits/poseidon-preimage/`: reproducible Circom circuit used by the tutorial.
-- `circuits/poseidon-preimage-bound/`: bound-variant Circom circuit with a reserved context input.
+- `circuits/poseidon-preimage-bound/`: the same circuit with a reserved context input, required by the transaction-binding mode.
 - `docs/tutorial.md`: end-to-end walkthrough from circuit to unlocked cell.
 - `docs/encoding-rationale.md`: the witness and vk byte layout, and the reasoning behind it.
 - `tests/`: integration tests over the built contract binary.

@@ -45,14 +45,14 @@ enum Command {
         proof: PathBuf,
         public_inputs: PathBuf,
     },
-    /// Same as `lock` but wired for the tx-context-bound zk-lock variant.
+    /// Same as `lock` but wired for the transaction-binding mode.
     LockBound {
         code_hash: String,
         vk_hash: String,
         pi_commitment: String,
         capacity_ckb: u64,
     },
-    /// Same as `unlock` but for the bound variant. `--recipient` overrides self-spend.
+    /// Same as `unlock` but for the bound mode. `--recipient` overrides self-spend.
     UnlockBound {
         cell: String,
         contract_dep: String,
@@ -62,7 +62,7 @@ enum Command {
         #[arg(long)]
         recipient: Option<String>,
     },
-    /// Compute the expected pi[0] context scalar for a bound-variant unlock.
+    /// Compute the expected pi[0] context scalar for a bound-mode unlock.
     ContextHash {
         cell: String,
         contract_dep: String,

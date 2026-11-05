@@ -7,7 +7,13 @@ use ckb_testtool::ckb_types::{
 };
 use ckb_testtool::context::Context;
 
-const MAX_CYCLES: u64 = 250_000_000;
+use crate::{
+    E_ARGS_LENGTH, E_CONTEXT_MISMATCH, E_INVALID_PROOF, E_PI_COMMITMENT_MISMATCH,
+    E_PUBLIC_INPUT_COUNT_TOO_SMALL, E_PUBLIC_INPUTS_LENGTH_MISMATCH, E_VKEY_DUPLICATED,
+    E_VKEY_NOT_FOUND, E_WITNESS_LOCK_MISSING, E_WITNESS_LOCK_TOO_SHORT, MAX_CYCLES,
+    assert_rejects_with,
+};
+
 const CONTRACT_NAME: &str = "zk-lock-bound";
 const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
 
@@ -22,36 +28,6 @@ const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
 const BOUND_VK_BYTES: &[u8] = include_bytes!("../fixtures/bound/vk.bin");
 const BOUND_PROOF_BYTES: &[u8] = include_bytes!("../fixtures/bound/proof.bin");
 const BOUND_PI_BYTES: &[u8] = include_bytes!("../fixtures/bound/public_inputs.bin");
-
-// Error discriminants from crates/zk-lock-core/src/error.rs.
-// Asserting these matters here: every tx in this file carries a dummy proof,
-// so verify_tx fails no matter what. Without pinning the code, a test would
-// still pass if the check it targets were deleted from the script.
-const E_ARGS_LENGTH: i8 = 10;
-const E_WITNESS_LOCK_MISSING: i8 = 11;
-const E_WITNESS_LOCK_TOO_SHORT: i8 = 12;
-const E_PUBLIC_INPUTS_LENGTH_MISMATCH: i8 = 13;
-const E_VKEY_NOT_FOUND: i8 = 14;
-const E_PI_COMMITMENT_MISMATCH: i8 = 15;
-const E_INVALID_PROOF: i8 = 17;
-const E_VKEY_DUPLICATED: i8 = 21;
-const E_CONTEXT_MISMATCH: i8 = 22;
-const E_PUBLIC_INPUT_COUNT_TOO_SMALL: i8 = 23;
-
-fn assert_script_error(err: ckb_testtool::ckb_error::Error, code: i8) {
-    let s = err.to_string();
-    assert!(
-        s.contains(&format!("error code {code} ")),
-        "expected error code {code}, got: {s}"
-    );
-}
-
-fn assert_rejects_with(ctx: &Context, tx: &TransactionView, code: i8) {
-    let err = ctx
-        .verify_tx(tx, MAX_CYCLES)
-        .expect_err("script should have rejected this transaction");
-    assert_script_error(err, code);
-}
 
 fn vk_hash() -> [u8; 32] {
     blake2b_256(VK_BYTES)

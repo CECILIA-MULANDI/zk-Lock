@@ -28,7 +28,7 @@ use ckb_std::high_level::{
     load_witness_args,
 };
 
-const PROOF_LENGTH: usize = 128;
+const PROOF_LEN: usize = 128;
 
 /// Whether public input 0 is reserved for the transaction-context scalar.
 ///
@@ -95,11 +95,11 @@ pub fn verify_spend(binding: Binding) -> Result<(), Error> {
         .ok_or(Error::WitnessLockMissing)?;
 
     let witness_lock = lock_bytes.raw_data();
-    if witness_lock.len() < PROOF_LENGTH + 4 {
+    if witness_lock.len() < PROOF_LEN + 4 {
         return Err(Error::WitnessLockTooShort);
     }
-    let proof_bytes = &witness_lock[..PROOF_LENGTH];
-    let pi_bytes = &witness_lock[PROOF_LENGTH..];
+    let proof_bytes = &witness_lock[..PROOF_LEN];
+    let pi_bytes = &witness_lock[PROOF_LEN..];
 
     let pi_count = u32::from_le_bytes(pi_bytes[..4].try_into().unwrap()) as usize;
 
