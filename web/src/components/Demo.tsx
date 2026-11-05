@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Nav } from "./Nav";
 import { SecretForm } from "./SecretForm";
 import { WhatHappensNext } from "./WhatHappensNext";
@@ -7,6 +7,7 @@ import { WitnessView } from "./WitnessView";
 import { LockCheck } from "./LockCheck";
 import { RuleTrace } from "./RuleTrace";
 import { runAttempt, type Attempt, type Stage } from "../lib/prove";
+import type { DryRunState } from "../lib/unlock";
 import { CODE_HASH, CONTRACT_DEP, explorerTx } from "../lib/config";
 import { REPO_URL, SHELL } from "../lib/layout";
 
@@ -16,8 +17,47 @@ export function Demo() {
   const [stage, setStage] = useState<Stage | null>(null);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dry, setDry] = useState<DryRunState>("running");
 
   const busy = stage !== null && stage !== "done";
+
+  // One dry run per attempt, held here because two panels below report it: the
+  // lock check states the verdict, and the rule trace uses the exit code to say
+  // which step stopped. Running it in each would ask a node the same question
+  // twice and risk the two disagreeing on screen.
+  //
+  // It runs for a wrong word as well as a right one. A rejection carries the
+  // script's own exit code, which is worth more than this page asserting the
+  // same thing, and a dry run spends nothing either way.
+  useEffect(() => {
+    if (!attempt) return;
+    let cancelled = false;
+    setDry("running");
+    void (async () => {
+      try {
+        const { dryRunProof } = await import("../lib/unlock");
+        const verdict = await dryRunProof({
+          proofBytes: attempt.proofBytes,
+          piBytes: attempt.piBytes,
+        });
+        if (!cancelled) setDry(verdict);
+      } catch (cause) {
+        if (!cancelled) {
+          setDry({
+            ok: false,
+            code: null,
+            reason:
+              cause instanceof Error
+                ? cause.message
+                : "the node could not be reached",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
 
   async function prove(word: string) {
     setAttempt(null);
@@ -40,7 +80,7 @@ export function Demo() {
       <main className={`${SHELL} flex flex-col gap-12 pt-18 pb-16`}>
         <div className="flex flex-wrap items-end justify-between gap-x-16 gap-y-6">
           <div className="flex min-w-0 flex-[1_1_560px] flex-col gap-4.5">
-            <p className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+            <p className="eyebrow text-muted">
               zk-Lock on Pudge testnet
             </p>
             <h1 className="font-display text-title font-extrabold">
@@ -79,14 +119,14 @@ export function Demo() {
         {attempt && (
           <div className="flex flex-col gap-14">
             <WitnessView attempt={attempt} />
-            <LockCheck attempt={attempt} />
-            <RuleTrace attempt={attempt} />
+            <LockCheck attempt={attempt} dry={dry} />
+            <RuleTrace attempt={attempt} dry={dry} />
           </div>
         )}
 
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-8 gap-y-6 border-t border-hairline pt-8">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+            <dt className="eyebrow text-muted">
               Contract cell
             </dt>
             <dd className="font-mono text-note [overflow-wrap:anywhere]">
@@ -101,7 +141,7 @@ export function Demo() {
             </dd>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+            <dt className="eyebrow text-muted">
               code_hash (type)
             </dt>
             <dd className="font-mono text-note text-body [overflow-wrap:anywhere]">
@@ -109,14 +149,14 @@ export function Demo() {
             </dd>
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <dt className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+            <dt className="eyebrow text-muted">
               Status
             </dt>
             <dd className="text-note text-body">
               Groth16 proof checked by a CKB lock script. Not audited, test
-              funds only. This is the generic lock; the transaction-binding
-              variant ties a proof to one specific transaction and is covered
-              in the tutorial.{" "}
+              funds only. This runs the check in generic mode; the
+              transaction-binding mode adds one more check, tying a proof to
+              one specific transaction, and is covered in the tutorial.{" "}
               <a
                 href={REPO_URL}
                 target="_blank"
