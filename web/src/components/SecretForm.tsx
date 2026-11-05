@@ -27,7 +27,7 @@ export function SecretForm({
       }}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-rust uppercase">
+        <span className="eyebrow text-on-rust">
           Stays with you
         </span>
         <span className="font-mono text-micro text-on-rust/75">

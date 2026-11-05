@@ -1,3 +1,4 @@
+import { PI_PREFIX_LEN, FR_LEN, PROOF_LEN } from "../lib/prove";
 import type { Stage } from "../lib/prove";
 
 const STAGES: ReadonlyArray<{ id: Stage; label: string; detail: string }> = [
@@ -24,7 +25,7 @@ const STAGES: ReadonlyArray<{ id: Stage; label: string; detail: string }> = [
   {
     id: "encoding",
     label: "Encoding the bytes that go on chain",
-    detail: "128 bytes of proof plus 36 of public input",
+    detail: `${PROOF_LEN} bytes of proof plus ${PI_PREFIX_LEN + FR_LEN} of public input`,
   },
 ];
 

@@ -1,6 +1,5 @@
 import { ArrowRight, Nav } from "./Nav";
 import { BoundaryCard } from "./BoundaryCard";
-import { DEMO_CELLS } from "../lib/config";
 import { REPO_URL, SHELL } from "../lib/layout";
 
 const STEPS = [
@@ -25,8 +24,6 @@ const STEPS = [
 ];
 
 export function Landing() {
-  const funded = DEMO_CELLS.length > 0;
-
   return (
     <div className="w-full">
       <Nav view="landing" />
@@ -35,15 +32,18 @@ export function Landing() {
         className={`${SHELL} flex flex-wrap items-center gap-[clamp(48px,6vw,120px)] pt-28 pb-30`}
       >
         <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-7">
-          <p className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+          <p className="eyebrow text-muted">
             A demo on the Nervos CKB test network
           </p>
           <h1 className="font-display text-hero font-extrabold">
             Some locks check a rule, not a key
           </h1>
+          {/* The headline says "a rule" and the section below it explains
+              knowing a word. This line is the handoff, so it has to name which
+              rule this particular lock checks. */}
           <p className="max-w-[38ch] text-lead text-body">
-            This one opens for anyone who can prove they know a secret word,
-            without ever saying the word.
+            The rule on this one is knowing a secret word. Prove you know it and
+            it opens, without you ever saying it.
           </p>
           <div className="flex flex-wrap items-center gap-5 pt-2">
             <a
@@ -130,22 +130,24 @@ export function Landing() {
         <div className="overflow-hidden rounded-[14px] border-2 border-ink">
           <div className="grid lg:grid-cols-[repeat(2,minmax(340px,1fr))]">
             <div className="flex flex-col gap-3.5 bg-white p-[clamp(28px,2.4vw,40px)]">
-              <span className="font-mono text-micro font-medium tracking-[0.15em] text-muted uppercase">
+              <span className="eyebrow text-muted">
                 Signature
               </span>
               <h3 className="font-display text-card font-bold">
                 You prove which one you are
               </h3>
               <p className="text-copy text-soft">
-                You sign with your key and the chain keeps it. Anyone looking
-                can now see which of the ten thousand opened the cell, and that
-                you were on the list at all. To show you are allowed, you hand
-                over the very thing that makes you allowed.
+                You sign with your key. Your key stays yours, but the signature
+                names it, and the chain keeps the signature forever. Anyone
+                looking can see which of the ten thousand opened the cell, and
+                that you were on the list at all. The cost is not your key. It
+                is that you cannot open this lock without saying which one of
+                them you are.
               </p>
             </div>
 
             <div className="flex flex-col gap-3.5 bg-public p-[clamp(28px,2.4vw,40px)]">
-              <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-teal-label uppercase">
+              <span className="eyebrow text-on-teal-label">
                 Proof
               </span>
               <h3 className="font-display text-card font-bold text-white">
@@ -172,12 +174,15 @@ export function Landing() {
 
       <section className={`${SHELL} pb-28`}>
         <div className="flex flex-col gap-6 rounded-[14px] bg-private p-[clamp(40px,5vw,80px)]">
-          {/* With an empty pool there is no cell behind the word, and the
-              result panel says so. This must not contradict it. */}
+          {/*
+            Deliberately silent about whether there is CKB left to take.
+            DEMO_CELLS staying five entries long says nothing about whether
+            those five are still unspent, so a promise made from its length is
+            a promise this page cannot keep. The prove page asks the chain and
+            tells the visitor the truth there.
+          */}
           <h2 className="font-display text-feature font-extrabold text-white">
-            {funded
-              ? "There's real CKB behind a word. Go open it."
-              : "Build a real proof. See exactly what gets sent."}
+            Build a real proof. See exactly what gets sent.
           </h2>
           <p className="max-w-[640px] text-copy text-on-rust">
             The demo word is public on purpose. Try a wrong one too, and watch

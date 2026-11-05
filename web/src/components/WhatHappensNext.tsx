@@ -22,7 +22,7 @@ export function WhatHappensNext({ locked }: { locked: boolean }) {
       className="flex min-w-0 flex-[1_1_440px] flex-col gap-[22px] rounded-[14px] bg-public p-[clamp(28px,2.4vw,40px)]"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-teal-label uppercase">
+        <span className="eyebrow text-on-teal-label">
           Goes to the blockchain
         </span>
         <span className="font-mono text-micro text-on-teal-label/75">public</span>
