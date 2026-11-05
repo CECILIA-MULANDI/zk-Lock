@@ -420,11 +420,11 @@ Look each up on the [Pudge explorer](https://pudge.explorer.nervos.org/).
 
 The interesting one is the unlock. Its witness contains 128 bytes of proof followed by a length-prefixed public-inputs vector. The lock script pulled the vk out of the vk cell (matched by `blake2b(data) == vk_hash`), pulled the public inputs out of the witness (matched against `pi_commitment`), and ran a full Groth16 pairing check. The unlock succeeded because the proof was valid.
 
-## 11. Transaction-binding variant (recommended for production)
+## 11. Transaction binding (recommended for production)
 
 The generic zk-Lock above verifies the proof but does not tie it to a specific transaction. Anyone who sees a pending unlock in the mempool can copy the witness verbatim, substitute their own recipient into the first output, and race it. The proof still validates because the on-chain script only asks "is this proof valid for these public inputs?", not "was this proof produced for this tx?".
 
-The **bound variant** at `contracts/zk-lock-bound/` closes that gap. It reserves the first public input `pi[0]` for a transaction-context scalar and asserts on-chain that
+**Transaction binding** closes that gap. It is not a second lock design: both `contracts/zk-lock/` and `contracts/zk-lock-bound/` are the same spend check from `crates/zk-lock-core/`, called with `Binding::None` and `Binding::Transaction` respectively. Binding adds one check and removes none, so everything above still holds. The added check reserves the first public input `pi[0]` for a transaction-context scalar and asserts on-chain that
 
 ```
 pi[0] == blake2b(input_outpoint || blake2b(first_output_cell || first_output_data))
@@ -479,7 +479,7 @@ cargo run -p cli --release -- deploy-vk /tmp/vk-bound.bin
 
 ### Lock behind the bound script
 
-Compute the body-only commitment. `hash-pi` takes a `--skip` flag that drops the first N public inputs before hashing; for the bound variant, skip `pi[0]` (the context slot):
+Compute the body-only commitment. `hash-pi` takes a `--skip` flag that drops the first N public inputs before hashing; under transaction binding, skip `pi[0]` (the context slot):
 
 ```
 cargo run -p cli --release -- hash-pi /tmp/pi-bound.bin --skip 1

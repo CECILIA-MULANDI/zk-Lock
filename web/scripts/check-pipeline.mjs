@@ -8,7 +8,32 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { groth16 } from "snarkjs";
-import { encodeProof, encodePublicInputs, hashPi } from "@zk-lock/sdk";
+import {
+  encodeProof,
+  encodePublicInputs,
+  hashPi,
+  FR_LEN,
+  PI_PREFIX_LEN,
+  PROOF_LEN,
+} from "@zk-lock/sdk";
+import * as browserFrame from "../src/lib/prove.ts";
+
+// src/lib/prove.ts restates the frame constants instead of importing them,
+// because a static SDK import drags @ckb-ccc/core onto the browser's critical
+// path. That copy is only safe if something checks it, so this does.
+for (const [name, sdkValue, webValue] of [
+  ["PROOF_LEN", PROOF_LEN, browserFrame.PROOF_LEN],
+  ["PI_PREFIX_LEN", PI_PREFIX_LEN, browserFrame.PI_PREFIX_LEN],
+  ["FR_LEN", FR_LEN, browserFrame.FR_LEN],
+]) {
+  if (sdkValue !== webValue) {
+    console.error(
+      `\n${name} disagrees: sdk says ${sdkValue}, src/lib/prove.ts says ${webValue}.`
+    );
+    process.exit(1);
+  }
+}
+console.log(`frame constants : match the sdk (${PROOF_LEN} + ${PI_PREFIX_LEN} + ${FR_LEN})`);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const circuit = join(here, "..", "public", "circuit");

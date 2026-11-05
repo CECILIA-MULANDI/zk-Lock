@@ -16,6 +16,36 @@ mod tests;
 #[cfg(test)]
 mod tests_bound;
 
+pub const MAX_CYCLES: u64 = 250_000_000;
+
+/// Error discriminants from `crates/zk-lock-core/src/error.rs`.
+///
+/// Both test modules pin these rather than asserting a bare `is_err()`. A
+/// transaction that is wrong in one way is usually wrong in several, so without
+/// the code a test would still pass if the check it targets were deleted from
+/// the script.
+pub const E_ARGS_LENGTH: i8 = 10;
+pub const E_WITNESS_LOCK_MISSING: i8 = 11;
+pub const E_WITNESS_LOCK_TOO_SHORT: i8 = 12;
+pub const E_PUBLIC_INPUTS_LENGTH_MISMATCH: i8 = 13;
+pub const E_VKEY_NOT_FOUND: i8 = 14;
+pub const E_PI_COMMITMENT_MISMATCH: i8 = 15;
+pub const E_INVALID_PROOF: i8 = 17;
+pub const E_VKEY_DUPLICATED: i8 = 21;
+pub const E_CONTEXT_MISMATCH: i8 = 22;
+pub const E_PUBLIC_INPUT_COUNT_TOO_SMALL: i8 = 23;
+
+pub fn assert_rejects_with(ctx: &Context, tx: &TransactionView, code: i8) {
+    let err = ctx
+        .verify_tx(tx, MAX_CYCLES)
+        .expect_err("script should have rejected this transaction")
+        .to_string();
+    assert!(
+        err.contains(&format!("error code {code} ")),
+        "expected error code {code}, got: {err}"
+    );
+}
+
 // The exact same Loader code from capsule's template, except that
 // now we use MODE as the environment variable
 const TEST_ENV_VAR: &str = "MODE";

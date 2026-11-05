@@ -17,7 +17,7 @@ ckb-types = "1.1.3"
 secp256k1 = "0.29"
 ckb-hash = "1.1.1"
 ckb-jsonrpc-types = "1.2.0"
-verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
+verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb", rev = "e969ad154ea2c00df57f68238ddfbcbc9ceb1419" }
 ark-bn254 = "0.5.0"
 ark-ec = "0.5.0"
 ark-ff = "0.5.0"

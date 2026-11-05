@@ -8,8 +8,9 @@ Questions, suggestions and bug reports are all welcome as issues; there is no se
 
 | Path                       | What it is                                                                     |
 | -------------------------- | ------------------------------------------------------------------------------ |
-| `contracts/zk-lock/`       | The generic on-chain lock script                                               |
-| `contracts/zk-lock-bound/` | Transaction-binding sibling; reserves `pi[0]` for a transaction-context scalar |
+| `crates/zk-lock-core/`     | The spend check both scripts run, and the error codes they share               |
+| `contracts/zk-lock/`       | The same check in generic mode (`Binding::None`)                              |
+| `contracts/zk-lock-bound/` | The same check in binding mode; reserves `pi[0]` for a tx-context scalar       |
 | `native-simulators/`       | Native-target simulators for both scripts, used by the test suite              |
 | `tests/`                   | Integration tests against both scripts                                         |
 | `cli/`                     | Rust CLI: encode snarkjs artifacts, hash, deploy, lock, unlock                 |

@@ -11,6 +11,25 @@ const HALF_P = (P - 1n) / 2n;
 const FLAG_INFINITY = 0x40;
 const FLAG_Y_NEGATIVE = 0x80;
 
+/**
+ * The arkworks-compressed byte layout, mirrored from `crates/zk-lock-core`.
+ *
+ * Exported because `decode.ts` takes the same frames apart and `ckb.ts` packs
+ * them into a witness, and the numbers were previously bare literals in all
+ * three. Nothing makes them agree at compile time with the on-chain script, so
+ * the least this side can do is state each length once.
+ */
+export const G1_LEN = 32;
+export const G2_LEN = 64;
+/** An `Fr` element. Equal to `G1_LEN` by coincidence, not by definition. */
+export const FR_LEN = 32;
+/** pi_a (G1) || pi_b (G2) || pi_c (G1). */
+export const PROOF_LEN = G1_LEN + G2_LEN + G1_LEN;
+/** The `u32` LE count that precedes the public-input elements. */
+export const PI_PREFIX_LEN = 4;
+/** The `u64` LE count that precedes the vk's IC vector. */
+export const VK_IC_PREFIX_LEN = 8;
+
 type G1Proj = [string, string, string];
 type G2Proj = [[string, string], [string, string], [string, string]];
 
@@ -41,9 +60,9 @@ function bigIntToLe32(x: bigint, modulus: bigint): Uint8Array {
   if (x < 0n || x >= modulus) {
     throw new Error(`field element out of range: ${x}`);
   }
-  const out = new Uint8Array(32);
+  const out = new Uint8Array(FR_LEN);
   let v = x;
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < FR_LEN; i++) {
     out[i] = Number(v & 0xffn);
     v >>= 8n;
   }
@@ -160,25 +179,24 @@ function parseG2(
     yC1: parseDecString(y[1], `${where}.y.c1`),
   };
 }
-// Proof bytes: pi_a (G1, 32B) || pi_b (G2, 64B) || pi_c (G1, 32B) = 128B.
+
 export function encodeProof(proof: SnarkjsProof): Uint8Array {
   assertGroth16Bn254(proof, "proof");
   const a = parseG1(proof.pi_a, "proof.pi_a");
   const b = parseG2(proof.pi_b, "proof.pi_b");
   const c = parseG1(proof.pi_c, "proof.pi_c");
 
-  const out = new Uint8Array(128);
+  const out = new Uint8Array(PROOF_LEN);
   out.set(encodeG1(a.x, a.y), 0);
-  out.set(encodeG2(b.xC0, b.xC1, b.yC0, b.yC1), 32);
-  out.set(encodeG1(c.x, c.y), 96);
+  out.set(encodeG2(b.xC0, b.xC1, b.yC0, b.yC1), G1_LEN);
+  out.set(encodeG1(c.x, c.y), G1_LEN + G2_LEN);
   return out;
 }
 
-// Public-input bytes: u32 LE count || count * 32B Fr elements.
 // snarkjs's public.json is a top-level array of decimal strings.
 export function encodePublicInputs(publicSignals: string[]): Uint8Array {
   const n = publicSignals.length;
-  const out = new Uint8Array(4 + n * 32);
+  const out = new Uint8Array(PI_PREFIX_LEN + n * FR_LEN);
   // u32 LE length prefix
   out[0] = n & 0xff;
   out[1] = (n >>> 8) & 0xff;
@@ -187,15 +205,13 @@ export function encodePublicInputs(publicSignals: string[]): Uint8Array {
   for (let i = 0; i < n; i++) {
     out.set(
       encodeFr(parseDecString(publicSignals[i], `public[${i}]`)),
-      4 + i * 32
+      PI_PREFIX_LEN + i * FR_LEN
     );
   }
   return out;
 }
 
-// Verifying key bytes:
-//   alpha (G1, 32B) || beta (G2, 64B) || gamma (G2, 64B) || delta (G2, 64B)
-//   || u64 LE ic_len || ic_len * G1 (32B each)
+// alpha || beta || gamma || delta || u64 LE ic_len || ic_len G1 points.
 // For our 1-public-input Poseidon circuit: ic_len = 2, total = 296 bytes.
 export function encodeVerifyingKey(vk: SnarkjsVerifyingKey): Uint8Array {
   assertGroth16Bn254(vk, "vk");
@@ -213,28 +229,28 @@ export function encodeVerifyingKey(vk: SnarkjsVerifyingKey): Uint8Array {
   const delta = parseG2(vk.vk_delta_2, "vk.vk_delta_2");
   const ic = vk.IC.map((p, i) => parseG1(p, `vk.IC[${i}]`));
 
-  const total = 32 + 64 * 3 + 8 + ic.length * 32;
+  const total = G1_LEN + G2_LEN * 3 + VK_IC_PREFIX_LEN + ic.length * G1_LEN;
   const out = new Uint8Array(total);
   let off = 0;
   out.set(encodeG1(alpha.x, alpha.y), off);
-  off += 32;
+  off += G1_LEN;
   out.set(encodeG2(beta.xC0, beta.xC1, beta.yC0, beta.yC1), off);
-  off += 64;
+  off += G2_LEN;
   out.set(encodeG2(gamma.xC0, gamma.xC1, gamma.yC0, gamma.yC1), off);
-  off += 64;
+  off += G2_LEN;
   out.set(encodeG2(delta.xC0, delta.xC1, delta.yC0, delta.yC1), off);
-  off += 64;
+  off += G2_LEN;
 
   // u64 LE length prefix for the IC vector
   const icLen = BigInt(ic.length);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < VK_IC_PREFIX_LEN; i++) {
     out[off + i] = Number((icLen >> BigInt(i * 8)) & 0xffn);
   }
-  off += 8;
+  off += VK_IC_PREFIX_LEN;
 
   for (const p of ic) {
     out.set(encodeG1(p.x, p.y), off);
-    off += 32;
+    off += G1_LEN;
   }
   return out;
 }
