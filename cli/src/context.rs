@@ -9,6 +9,12 @@ use ckb_types::{
 };
 
 const FEE_RATE_SHANNONS_PER_KB: u64 = 1_500;
+
+/// Mirror of `PROOF_LEN` in `crates/zk-lock-core`, redeclared rather than
+/// imported: this crate depends on verifier-core directly, and pulling in a
+/// `no_std` contract crate for one constant is the worse trade. The on-chain
+/// script enforces the real value, so a drift here fails a spend locally
+/// rather than producing a bad witness. See docs/encoding-rationale.md.
 const PROOF_LEN: usize = 128;
 
 pub fn compute_context(

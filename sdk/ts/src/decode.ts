@@ -1,4 +1,12 @@
 import { bn254 } from "@noble/curves/bn254.js";
+import {
+  FR_LEN,
+  G1_LEN,
+  G2_LEN,
+  PI_PREFIX_LEN,
+  PROOF_LEN,
+  VK_IC_PREFIX_LEN,
+} from "./encode.js";
 
 const { Fp, Fp2, Fr } = bn254.fields;
 const P = Fp.ORDER;
@@ -30,15 +38,17 @@ function le32ToBigInt(bytes: Uint8Array, off: number): bigint {
 }
 
 export function decodeG1(bytes: Uint8Array, off = 0): G1PointT {
-  if (bytes.length < off + 32) {
-    throw new Error(`G1: need 32 bytes at offset ${off}, got ${bytes.length - off}`);
+  if (bytes.length < off + G1_LEN) {
+    throw new Error(
+      `G1: need ${G1_LEN} bytes at offset ${off}, got ${bytes.length - off}`,
+    );
   }
   const flagByte = bytes[off + 31];
   const isInfinity = (flagByte & FLAG_INFINITY) !== 0;
   const yIsNegative = (flagByte & FLAG_Y_NEGATIVE) !== 0;
 
-  const clean = new Uint8Array(32);
-  clean.set(bytes.subarray(off, off + 32));
+  const clean = new Uint8Array(G1_LEN);
+  clean.set(bytes.subarray(off, off + G1_LEN));
   clean[31] &= ~(FLAG_INFINITY | FLAG_Y_NEGATIVE);
 
   if (isInfinity) {
@@ -65,15 +75,17 @@ export function decodeG1(bytes: Uint8Array, off = 0): G1PointT {
 }
 
 export function decodeG2(bytes: Uint8Array, off = 0): G2PointT {
-  if (bytes.length < off + 64) {
-    throw new Error(`G2: need 64 bytes at offset ${off}, got ${bytes.length - off}`);
+  if (bytes.length < off + G2_LEN) {
+    throw new Error(
+      `G2: need ${G2_LEN} bytes at offset ${off}, got ${bytes.length - off}`,
+    );
   }
   const flagByte = bytes[off + 63];
   const isInfinity = (flagByte & FLAG_INFINITY) !== 0;
   const yIsNegative = (flagByte & FLAG_Y_NEGATIVE) !== 0;
 
-  const clean = new Uint8Array(64);
-  clean.set(bytes.subarray(off, off + 64));
+  const clean = new Uint8Array(G2_LEN);
+  clean.set(bytes.subarray(off, off + G2_LEN));
   clean[63] &= ~(FLAG_INFINITY | FLAG_Y_NEGATIVE);
 
   if (isInfinity) {
@@ -116,63 +128,66 @@ export interface DecodedVerifyingKey {
 }
 
 export function decodeProof(bytes: Uint8Array): DecodedProof {
-  if (bytes.length !== 128) {
-    throw new Error(`proof bytes: expected 128, got ${bytes.length}`);
+  if (bytes.length !== PROOF_LEN) {
+    throw new Error(`proof bytes: expected ${PROOF_LEN}, got ${bytes.length}`);
   }
   return {
     a: decodeG1(bytes, 0),
-    b: decodeG2(bytes, 32),
-    c: decodeG1(bytes, 96),
+    b: decodeG2(bytes, G1_LEN),
+    c: decodeG1(bytes, G1_LEN + G2_LEN),
   };
 }
 
-export const VK_HEADER = 32 + 64 * 3 + 8;
+export const VK_HEADER = G1_LEN + G2_LEN * 3 + VK_IC_PREFIX_LEN;
 
 export function decodeVerifyingKey(bytes: Uint8Array): DecodedVerifyingKey {
   if (bytes.length < VK_HEADER) {
     throw new Error(`vk bytes: too short (${bytes.length} < ${VK_HEADER})`);
   }
   const alpha = decodeG1(bytes, 0);
-  const beta = decodeG2(bytes, 32);
-  const gamma = decodeG2(bytes, 96);
-  const delta = decodeG2(bytes, 160);
+  const beta = decodeG2(bytes, G1_LEN);
+  const gamma = decodeG2(bytes, G1_LEN + G2_LEN);
+  const delta = decodeG2(bytes, G1_LEN + G2_LEN * 2);
 
+  const icLenOff = VK_HEADER - VK_IC_PREFIX_LEN;
   let icLen = 0n;
-  for (let i = 0; i < 8; i++) {
-    icLen |= BigInt(bytes[224 + i]) << BigInt(i * 8);
+  for (let i = 0; i < VK_IC_PREFIX_LEN; i++) {
+    icLen |= BigInt(bytes[icLenOff + i]) << BigInt(i * 8);
   }
   if (icLen > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`vk IC length ${icLen} is unreasonable`);
   }
   const n = Number(icLen);
-  const expected = VK_HEADER + n * 32;
+  const expected = VK_HEADER + n * G1_LEN;
   if (bytes.length !== expected) {
     throw new Error(
-      `vk bytes length ${bytes.length} != ${expected} (header + ${n}*32)`,
+      `vk bytes length ${bytes.length} != ${expected} (header + ${n}*${G1_LEN})`,
     );
   }
 
   const ic: G1PointT[] = [];
   for (let i = 0; i < n; i++) {
-    ic.push(decodeG1(bytes, VK_HEADER + i * 32));
+    ic.push(decodeG1(bytes, VK_HEADER + i * G1_LEN));
   }
   return { alpha, beta, gamma, delta, ic };
 }
 
 export function decodePublicInputs(bytes: Uint8Array): bigint[] {
-  if (bytes.length < 4) {
-    throw new Error("pi bytes too short: missing 4-byte length prefix");
+  if (bytes.length < PI_PREFIX_LEN) {
+    throw new Error(
+      `pi bytes too short: missing ${PI_PREFIX_LEN}-byte length prefix`,
+    );
   }
   const n = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
-  const expected = 4 + n * 32;
+  const expected = PI_PREFIX_LEN + n * FR_LEN;
   if (bytes.length !== expected) {
     throw new Error(
-      `pi bytes length ${bytes.length} != 4 + ${n}*32 = ${expected}`
+      `pi bytes length ${bytes.length} != ${PI_PREFIX_LEN} + ${n}*${FR_LEN} = ${expected}`
     );
   }
   const out: bigint[] = [];
   for (let i = 0; i < n; i++) {
-    const v = le32ToBigInt(bytes, 4 + i * 32);
+    const v = le32ToBigInt(bytes, PI_PREFIX_LEN + i * FR_LEN);
     if (v >= R) {
       throw new Error(`public[${i}] = ${v} is not a valid Fr element (>= R)`);
     }
