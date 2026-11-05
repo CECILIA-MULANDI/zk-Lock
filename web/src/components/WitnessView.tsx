@@ -1,5 +1,5 @@
 import type { Attempt } from "../lib/prove";
-import { toHex } from "../lib/prove";
+import { PI_PREFIX_LEN, PROOF_LEN, toHex } from "../lib/prove";
 
 function HexField({
   label,
@@ -13,7 +13,7 @@ function HexField({
   return (
     <div className="rounded-lg bg-public/6 px-4 py-3.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-mono text-micro font-semibold tracking-[0.12em] text-public uppercase">
+        <span className="eyebrow text-public">
           {label}
         </span>
         <span className="text-note text-muted">{note}</span>
@@ -30,15 +30,18 @@ export function WitnessView({ attempt }: { attempt: Attempt }) {
   const paddedFieldHex =
     fieldHex.length % 2 === 1 ? `0${fieldHex}` : fieldHex;
 
-  const proof = attempt.witnessLock.slice(0, 128);
-  const piCount = attempt.witnessLock.slice(128, 132);
-  const publicInputs = attempt.witnessLock.slice(132);
+  const proof = attempt.witnessLock.slice(0, PROOF_LEN);
+  const piCount = attempt.witnessLock.slice(
+    PROOF_LEN,
+    PROOF_LEN + PI_PREFIX_LEN
+  );
+  const publicInputs = attempt.witnessLock.slice(PROOF_LEN + PI_PREFIX_LEN);
 
   return (
     <section className="grid gap-8 lg:grid-cols-[24rem_minmax(0,1fr)] 2xl:grid-cols-[30rem_minmax(0,1fr)]">
       <div className="lg:sticky lg:top-8 lg:self-start">
         <div className="rounded-[14px] bg-private p-[clamp(28px,2.4vw,40px)]">
-          <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-rust uppercase">
+          <span className="eyebrow text-on-rust">
             Stays with you
           </span>
           <h2 className="mt-3 font-display text-card font-bold text-white">
@@ -100,7 +103,7 @@ export function WitnessView({ attempt }: { attempt: Attempt }) {
         </p>
 
         <div className="mt-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-hairline pb-2">
-          <span className="font-mono text-micro font-semibold tracking-[0.12em] text-public uppercase">
+          <span className="eyebrow text-public">
             witness.lock
           </span>
           <span className="text-note text-muted">
@@ -109,15 +112,15 @@ export function WitnessView({ attempt }: { attempt: Attempt }) {
         </div>
 
         <div className="mt-3 space-y-2.5">
-          <HexField label="proof" note="128 bytes" bytes={proof} />
+          <HexField label="proof" note={`${proof.length} bytes`} bytes={proof} />
           <HexField
             label="pi_count"
-            note="4 bytes, how many public values follow"
+            note={`${piCount.length} bytes, how many public values follow`}
             bytes={piCount}
           />
           <HexField
             label="public_inputs"
-            note="32 bytes, the fingerprint of your word"
+            note={`${publicInputs.length} bytes, the fingerprint of your word`}
             bytes={publicInputs}
           />
         </div>

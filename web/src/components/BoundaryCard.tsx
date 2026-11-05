@@ -12,12 +12,12 @@ export function BoundaryCard() {
     <div className="min-w-0 flex-[1_1_420px] overflow-hidden rounded-[14px] border-2 border-ink">
       <div className="flex flex-col gap-4 bg-private px-7 pt-7 pb-8">
         <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-rust uppercase">
+          <span className="eyebrow text-on-rust">
             Stays with you
           </span>
-          <span className="font-mono text-micro text-on-rust/75">
-            your browser
-          </span>
+          {/* Full strength, not 75%. Faded small mono on a saturated ground
+              reads as a rendering fault rather than as a quiet label. */}
+          <span className="font-mono text-micro text-on-rust">your browser</span>
         </div>
         <p className="font-display text-panel font-bold text-white">
           your word
@@ -29,8 +29,11 @@ export function BoundaryCard() {
           >
             ••••••
           </span>
+          {/* Not "forgotten": the word is held in this tab for as long as the
+              tab is open. What is true, and is the card's actual claim, is
+              that it is never sent anywhere. */}
           <span className="ml-auto text-note text-private">
-            typed, used, forgotten
+            typed here, sent nowhere
           </span>
         </div>
       </div>
@@ -43,12 +46,10 @@ export function BoundaryCard() {
 
       <div className="flex flex-col gap-4 bg-public px-7 pt-8 pb-7">
         <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-micro font-medium tracking-[0.15em] text-on-teal-label uppercase">
+          <span className="eyebrow text-on-teal-label">
             Goes to the blockchain
           </span>
-          <span className="font-mono text-micro text-on-teal-label/75">
-            public
-          </span>
+          <span className="font-mono text-micro text-on-teal-label">public</span>
         </div>
         <p className="font-display text-panel font-bold text-white">
           the proof
