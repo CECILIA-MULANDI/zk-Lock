@@ -5,6 +5,7 @@ import {
   planBoundUnlock,
   type BoundPlan,
 } from "../src/ckb.js";
+import { PROOF_LEN } from "../src/encode.js";
 
 /**
  * Regression cover for the bound unlock.
@@ -60,7 +61,7 @@ const plan = (overrides: Partial<Parameters<typeof planBoundUnlock>[0]> = {}) =>
     ...overrides,
   });
 
-const realProof = new Uint8Array(128).fill(0x7c);
+const realProof = new Uint8Array(PROOF_LEN).fill(0x7c);
 
 const outputCapacityOf = (tx: ccc.Transaction) =>
   ccc.numFrom(tx.outputs[0].capacity);
@@ -175,9 +176,9 @@ describe("buildBoundUnlockTx", () => {
     // ccc hands back a Node Buffer, which toEqual will not match against a
     // plain Uint8Array, so compare the byte values rather than the containers.
     const bytes = Array.from(ccc.bytesFrom(lock!));
-    expect(bytes.length).toBe(128 + PI_BYTES.length);
-    expect(bytes.slice(0, 128)).toEqual(Array.from(realProof));
-    expect(bytes.slice(128)).toEqual(Array.from(PI_BYTES));
+    expect(bytes.length).toBe(PROOF_LEN + PI_BYTES.length);
+    expect(bytes.slice(0, PROOF_LEN)).toEqual(Array.from(realProof));
+    expect(bytes.slice(PROOF_LEN)).toEqual(Array.from(PI_BYTES));
   });
 });
 

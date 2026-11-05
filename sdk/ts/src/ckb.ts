@@ -1,8 +1,8 @@
 import { ccc, hashCkb } from "@ckb-ccc/core";
+import { PROOF_LEN } from "./encode.js";
 
 const SHANNONS_PER_CKB = 100_000_000n;
 const FEE_RATE_SHANNONS_PER_KB = 1_500n;
-const PROOF_LEN = 128;
 
 export async function deployVk(
   signer: ccc.Signer,
@@ -104,8 +104,8 @@ export async function lockBound(
   return lock(signer, params);
 }
 
-/*
- * The transaction-binding variant.
+/**
+ * The transaction-binding mode.
  *
  * zk-lock-bound commits the proof to the transaction it will be spent in. Its
  * first public input is

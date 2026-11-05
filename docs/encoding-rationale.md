@@ -111,13 +111,21 @@ Which leaves a realistic integrator set of two:
 There are four real problems here, none of them about third-party interop. Molecule
 answers two, and both of those are blocked on a redeployment.
 
-**One source of truth for the lengths.** The proof length 128 is written out six times
-in this repository: `PROOF_LENGTH` in `contracts/zk-lock/src/main.rs` and again in
-`contracts/zk-lock-bound/src/main.rs`, `PROOF_LEN` in `cli/src/context.rs` and again
-as its TypeScript twin in `sdk/ts/src/ckb.ts`, and a bare literal `128` twice in the
-SDK, in `sdk/ts/src/encode.ts` and `sdk/ts/src/decode.ts`. verifier-core has a seventh.
+**One source of truth for the lengths.** The proof length 128 is declared four times in
+this repository, once per language boundary that cannot import across: `PROOF_LEN` in
+`crates/zk-lock-core/src/lib.rs` for both on-chain scripts, again in
+`cli/src/context.rs`, again in `sdk/ts/src/encode.ts`, and again in
+`web/src/lib/prove.ts`. verifier-core has a fifth.
 
-Nothing forces them to agree at compile time. Something does force it at runtime:
+Within a boundary there is now one declaration: the SDK's `encode.ts` exports the
+layout and `decode.ts` and `ckb.ts` import it, and the two contract binaries share
+`zk-lock-core`. What remains is cross-boundary. `cli` depends on verifier-core rather
+than on the `no_std` `zk-lock-core`, so it cannot import the constant without taking on
+a contract crate; and `web` loads the SDK dynamically to keep `@ckb-ccc/core` off the
+critical path, so a static import of the constant would pull ~270 kB into the initial
+bundle. Both copies are deliberate, and both are commented as mirrors.
+
+Nothing forces the four to agree at compile time. Something does force it at runtime:
 verifier-core rejects any proof whose length is not exactly `PROOF_LEN`, so a
 disagreement surfaces as an unspendable cell rather than as a forged proof. That is the
 same availability-not-soundness failure mode as the missing version tag below. It is

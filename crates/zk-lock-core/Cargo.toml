@@ -7,7 +7,10 @@ license.workspace = true
 [dependencies]
 ckb-std = "1.1"
 blake2b-ref = "0.3"
-verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb" }
+# Pinned: this crate is the spend check, so the verifier it builds against
+# decides whether an already-locked cell still opens. An unpinned git dep means
+# a fresh clone can silently build a different verifier than the one deployed.
+verifier-core = { git = "https://github.com/CECILIA-MULANDI/groth16-ckb", rev = "e969ad154ea2c00df57f68238ddfbcbc9ceb1419" }
 
 [features]
 library = []

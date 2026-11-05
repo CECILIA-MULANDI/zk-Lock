@@ -19,6 +19,23 @@ export const FIELD_MODULUS =
 export const MAX_SECRET_BYTES = 31;
 
 /**
+ * The witness.lock frame: proof || u32 LE count || count x field element.
+ *
+ * These mirror `PROOF_LEN`, `PI_PREFIX_LEN` and `FR_LEN` in the SDK rather
+ * than importing them, and that is deliberate. The SDK's entry point
+ * re-exports `ckb.js`, which pulls in @ckb-ccc/core, so a static import of
+ * three integers does not tree-shake: it put 520 kB of ccc on the critical
+ * path and took the first chunk from 264 kB to 786 kB. Everything heavy in
+ * this module is loaded on demand for exactly that reason.
+ *
+ * `npm run check:pipeline` asserts these equal the SDK's, so the copy cannot
+ * drift silently.
+ */
+export const PROOF_LEN = 128;
+export const PI_PREFIX_LEN = 4;
+export const FR_LEN = 32;
+
+/**
  * snarkjs is ~310 kB and nothing needs it until the visitor commits to
  * proving, so it loads on demand.
  *
@@ -57,11 +74,11 @@ export type Attempt = {
   /** snarkjs-shaped proof, before arkworks-compressed encoding. */
   proof: unknown;
   publicSignals: string[];
-  /** 128 bytes: pi_a (32) || pi_b (64) || pi_c (32). */
+  /** `PROOF_LEN` bytes: pi_a (32) || pi_b (64) || pi_c (32). */
   proofBytes: Uint8Array;
-  /** 36 bytes: u32 LE count || one 32-byte field element. */
+  /** `PI_PREFIX_LEN` + one `FR_LEN` element. */
   piBytes: Uint8Array;
-  /** 164 bytes, exactly what goes into witness.lock. */
+  /** Exactly what goes into witness.lock. */
   witnessLock: Uint8Array;
   /** blake2b_256 of the public-input bytes, excluding the count prefix. */
   piCommitment: `0x${string}`;

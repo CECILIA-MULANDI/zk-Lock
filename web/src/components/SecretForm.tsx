@@ -20,17 +20,17 @@ export function SecretForm({
 
   return (
     <form
-      className="flex min-w-0 flex-[1_1_440px] flex-col gap-5 rounded-[18px] border border-private-edge bg-private-tint p-8"
+      className="flex min-w-0 flex-[1_1_440px] flex-col gap-5 rounded-[14px] bg-private p-[clamp(28px,2.4vw,40px)]"
       onSubmit={(event) => {
         event.preventDefault();
         if (!tooLong && word.length > 0) onSubmit(word);
       }}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-micro font-semibold tracking-[0.14em] text-private uppercase">
+        <span className="eyebrow text-on-rust">
           Stays with you
         </span>
-        <span className="font-mono text-micro text-private-soft">
+        <span className="font-mono text-micro text-on-rust/75">
           never sent
         </span>
       </div>
@@ -38,7 +38,7 @@ export function SecretForm({
       <div className="flex flex-col gap-2.5">
         <label
           htmlFor="secret"
-          className="font-display text-card font-bold text-private"
+          className="font-display text-card font-bold text-white"
         >
           The secret word
         </label>
@@ -52,7 +52,7 @@ export function SecretForm({
           disabled={busy}
           aria-describedby="secret-help"
           onChange={(event) => setWord(event.target.value)}
-          className="h-[60px] rounded-xl border-[1.5px] border-private-edge-strong bg-private-paper px-[18px] font-mono text-card text-private outline-none disabled:opacity-60"
+          className="h-[60px] rounded-lg bg-white px-[18px] font-mono text-card text-private outline-none disabled:opacity-60"
         />
       </div>
 
@@ -61,7 +61,7 @@ export function SecretForm({
           type="button"
           disabled={busy}
           onClick={() => setWord(DEMO_SECRET)}
-          className="min-h-11 rounded-full border border-private-edge-strong bg-private-paper px-3.5 text-note text-private-ink disabled:opacity-50"
+          className="min-h-11 rounded-full bg-white px-3.5 text-note font-semibold text-private transition-colors hover:bg-ink hover:text-paper disabled:opacity-50"
         >
           Use the demo word
         </button>
@@ -69,7 +69,7 @@ export function SecretForm({
           type="button"
           disabled={busy}
           onClick={() => setWord(WRONG_WORD)}
-          className="min-h-11 rounded-full border border-private-edge-strong px-3.5 text-note text-private-ink disabled:opacity-50"
+          className="min-h-11 rounded-full border border-on-rust/40 px-3.5 text-note font-semibold text-on-rust transition-colors hover:bg-ink hover:text-paper disabled:opacity-50"
         >
           Try a wrong word
         </button>
@@ -78,22 +78,22 @@ export function SecretForm({
       <button
         type="submit"
         disabled={busy || tooLong || word.length === 0}
-        className="flex min-h-14 items-center justify-center gap-2.5 rounded-xl bg-public text-copy font-semibold text-paper transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex items-center justify-center gap-2.5 rounded-lg bg-ink px-[22px] py-3.5 text-copy font-semibold text-paper transition-colors hover:bg-public disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? "Proving…" : "Prove I know it"}
         {!busy && <ArrowRight />}
       </button>
 
-      <p id="secret-help" className="text-note text-private-help">
+      <p id="secret-help" className="text-note text-on-rust">
         {tooLong ? (
-          <span className="font-semibold text-private">
+          <span className="font-semibold text-white">
             That is {bytes} bytes. {MAX_SECRET_BYTES} is the most that fits in
             one field element.
           </span>
         ) : (
           <>
             The demo word is{" "}
-            <code className="rounded bg-private-paper px-1.5 py-0.5 font-mono">
+            <code className="rounded bg-white/15 px-1.5 py-0.5 font-mono">
               {DEMO_SECRET}
             </code>
             . That is public on purpose: this explains a mechanism rather than
