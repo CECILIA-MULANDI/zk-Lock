@@ -144,5 +144,17 @@ export const DEMO_CELLS: ReadonlyArray<{ txHash: string; index: number }> = [
 export const DEFAULT_RECIPIENT_ADDRESS: string | null =
   "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq2rz87rdtwfny5d4q2e4muzjw5qrqgpcwqsuvudr";
 
+/**
+ * Where the "tell me what you made of this" link after a successful unlock
+ * points. `null` hides the link entirely, so this can sit here unset without
+ * putting a dead link in front of a visitor.
+ *
+ * It is only ever offered after a spend succeeds, which is both the moment
+ * someone is most willing to answer and the only moment they have actually
+ * seen the thing work.
+ */
+export const FEEDBACK_FORM_URL: string | null =
+  "https://docs.google.com/forms/d/e/1FAIpQLSe5KOUMpOVAMTivzL2_KcRXSK21k0IEXtkp6Ji5jC0pkbvUsQ/viewform";
+
 export const explorerTx = (txHash: string) =>
   `${PUDGE_EXPLORER}/transaction/${txHash}`;

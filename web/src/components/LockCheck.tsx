@@ -6,6 +6,7 @@ import {
   DEMO_CELLS,
   DEMO_PI_COMMITMENT,
   DEMO_SECRET,
+  FEEDBACK_FORM_URL,
   explorerTx,
 } from "../lib/config";
 // Type-only: erased at build time, so this does not drag ccc into the bundle.
@@ -300,6 +301,27 @@ export function LockCheck({
               The fee came out of the locked cell itself, which is why this
               needed no wallet and no funds of yours.
             </p>
+            {/* A link out, not an embedded form. The page's whole claim is that
+                the word never leaves this machine and no request carries it, and
+                a third-party frame sitting next to that claim muddies it. This
+                opens in a new tab so the result above stays on screen. */}
+            {FEEDBACK_FORM_URL && (
+              <div className="zkl-rise zkl-rise-3 mt-7 border-t border-hairline pt-6">
+                <a
+                  href={FEEDBACK_FORM_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-lg bg-ink px-[22px] py-3.5 text-copy font-semibold text-paper transition-colors hover:bg-public"
+                >
+                  Tell me what you made of this
+                </a>
+                <p className="mt-3 text-note text-muted">
+                  Five short questions, no account needed. I read every answer,
+                  and what people find confusing here is what gets rewritten
+                  next.
+                </p>
+              </div>
+            )}
           </div>
           <dl className="zkl-rise zkl-rise-3 space-y-3">
             <div>
