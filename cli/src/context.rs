@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use ckb_hash::blake2b_256;
 use ckb_sdk::{CkbRpcClient, NetworkInfo};
 use ckb_types::{
     bytes::Bytes,
@@ -75,19 +74,12 @@ pub fn compute_context(
         .checked_sub(fee)
         .context("cell capacity is too small to cover the computed fee")?;
 
-    let capacity_packed: ckb_types::packed::Uint64 = output_capacity.pack();
-    let output = CellOutput::new_builder()
-        .capacity(capacity_packed)
-        .lock(recipient.clone())
-        .build();
-
-    let first_out_hash = blake2b_256(output.as_slice());
-    let mut ctx_buf = Vec::with_capacity(cell.as_slice().len() + 32);
-    ctx_buf.extend_from_slice(cell.as_slice());
-    ctx_buf.extend_from_slice(&first_out_hash);
-    let expected = blake2b_256(&ctx_buf);
+    // Hash of the transaction `unlock-bound` will send, at the post-fee
+    // capacity because capacity is inside `tx_hash`. The size-matched
+    // placeholder witness is enough, since `tx_hash` excludes witnesses.
+    let tx = build_tx(output_capacity);
 
     let mut scalar = [0u8; 32];
-    scalar[..31].copy_from_slice(&expected[..31]);
+    scalar[..31].copy_from_slice(&tx.hash().raw_data()[..31]);
     Ok(scalar)
 }
