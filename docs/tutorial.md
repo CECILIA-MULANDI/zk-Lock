@@ -427,10 +427,16 @@ The generic zk-Lock above verifies the proof but does not tie it to a specific t
 **Transaction binding** closes that gap. It is not a second lock design: both `contracts/zk-lock/` and `contracts/zk-lock-bound/` are the same spend check from `crates/zk-lock-core/`, called with `Binding::None` and `Binding::Transaction` respectively. Binding adds one check and removes none, so everything above still holds. The added check reserves the first public input `pi[0]` for a transaction-context scalar and asserts on-chain that
 
 ```
-pi[0] == blake2b(input_outpoint || blake2b(first_output_cell || first_output_data))
+pi[0] == tx_hash
 ```
 
 truncated to 31 bytes plus a zero byte so it fits in the BN254 scalar field.
+
+`tx_hash` is CKB's own transaction hash: the hash of the RawTransaction, covering version, cell deps, header deps, inputs, outputs and outputs data. It is also what CKB's default lock signs, so a bound zk-Lock spend authorises exactly the scope a signed spend does.
+
+It covers everything at once, which is what makes this a single rule rather than a list of them. An earlier version of this script hashed only the input outpoint and the first output. That is a `SIGHASH_SINGLE`, and a partial commitment obliges you to say "and nothing else" about the parts it leaves out, because a hash cannot say that for you. It did not, so a second cell at the same address could join the input group and be spent under the one proof.
+
+The witnesses are deliberately outside `tx_hash`. Without that, proving against the transaction would be circular, because the proof lives in `witness.lock`.
 
 ### What the bound circuit looks like
 
@@ -445,12 +451,19 @@ template PoseidonPreimageBound() {
     component hasher = Poseidon(1);
     hasher.inputs[0] <== preimage;
     hasher.out === digest;
+
+    signal ctxSq;
+    ctxSq <== context * context;
 }
 
 component main {public [context, digest]} = PoseidonPreimageBound();
 ```
 
-`context` is a public input the circuit does not constrain. The on-chain script constrains it. The circuit just reserves its position in the PI vector.
+`context` is a public input the circuit has no condition to impose on. The on-chain script is what constrains its value; the circuit reserves its position in the PI vector.
+
+The squaring is not a condition either, and it matters anyway. A public input that appears in no constraint at all can be assigned a zero IC point by the setup, and the pairing check would then accept any value in that slot, leaving the proof unbound to the transaction. snarkjs pads the QAP with a row per public input and so binds it in practice, which you can check by hand: edit `public.json` to `context + 1` and `snarkjs groth16 verify` reports an invalid proof. But that is the compiler's behaviour rather than something the circuit states, and one line is cheap insurance. It costs exactly one constraint, 415 to 416.
+
+If you write your own bound circuit, do the same with your context signal.
 
 `pi_commitment` in `lock.args` covers `pi[1..N]` only (the "body"), because `pi[0]` is unknown at lock time; it is computed from the tx layout at unlock time.
 
@@ -517,13 +530,24 @@ Pass `--recipient <address>` to send the unlocked funds to a different address; 
 
 ### What the binding gives you
 
-- Cross-cell replay: prevented. `input_outpoint` is unique per cell.
-- Recipient redirect: prevented. The first output cell bytes are hashed into the context; changing the recipient changes the hash.
-- Same-tx reordering: partially prevented. The first output slot is fixed by construction; downstream outputs are not.
+- Cross-cell replay: prevented. The inputs are part of `tx_hash`, and outpoints are unique per cell.
+- Recipient redirect: prevented. Changing any output changes `tx_hash`.
+- Extra inputs or outputs: prevented. Adding anything changes `tx_hash`, including a second cell at the same address joining the input group.
+- Dep substitution: prevented. `cell_deps` are covered, so the verifying key the transaction loads is pinned too.
 
-If you build unlock transactions with a different first-output layout than `context-hash` assumed (different fee rate, different data, non-empty type script), the on-chain check will fail. That is the intended behavior: the binding is only as tight as the tx layout you agree to.
+The scope is the whole transaction, so there is nothing left for a spender to vary. The cost is that the prover has to know the final transaction before proving: change the fee rate, the output data or a dep after computing the context and the on-chain check fails. That is not a layout convention to memorise, it is one rule, and `context-hash` and `unlock-bound` build the identical transaction so they cannot drift.
 
-The SDK covers the same flow in `sdk/ts/src/ckb.ts`, deliberately as two halves that hand state to each other. `computeContextHash` returns a `BoundPlan`: the context scalar to prove against, plus the exact output capacity and fee it assumed when computing it. `unlockBound` takes that plan back and refuses to send if the transaction it would build no longer matches, so a drifting fee fails locally instead of being rejected on chain. `planBoundUnlock` and `buildBoundUnlockTx` are the pure halves of each, if you want to assert in a test that the two agree.
+The SDK covers the same flow in `sdk/ts/src/ckb.ts`. The primitive is `boundContextScalar(tx)`, which takes any transaction and returns its context scalar, so an application that needs several outputs, output data or extra deps builds its own `ccc.Transaction` and calls that:
+
+```ts
+// 1. assemble the transaction, with a zero-filled proof of the right length
+// 2. prove with boundContextScalar(tx) as public input 0
+// 3. put the real proof in witness.lock and send
+```
+
+Step 1 needs the witness at its final length even though the bytes are ignored, because the length sets the fee, the fee sets output 0's capacity, and capacity is inside `tx_hash`.
+
+For the common one-input, one-output unlock there is a convenience pair on top of it. `computeContextHash` returns a `BoundPlan`: the context scalar to prove against, plus the exact output capacity and fee it assumed. `unlockBound` takes that plan back and refuses to send if the transaction it would build no longer matches, so a drifting fee fails locally instead of being rejected on chain. `planBoundUnlock` and `buildBoundUnlockTx` are the pure halves of each, if you want to assert in a test that the two agree.
 
 Note that `unlockBound` takes a client and an explicit recipient rather than a signer. A bound unlock needs no signature and no funded wallet, because the fee comes out of the locked cell's own capacity; and the recipient is hashed into the proof, so it has to be chosen before proving rather than read off a wallet at send time.
 

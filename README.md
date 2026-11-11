@@ -24,6 +24,8 @@ The byte layout of `witness.lock` and of the verifying key in cell data is speci
 
 The check above runs in two binding modes, not as two lock designs. `contracts/zk-lock/` and `contracts/zk-lock-bound/` are the same spend check from `crates/zk-lock-core/`, called with `Binding::None` and `Binding::Transaction`. Binding adds one check and removes none: it reserves the first public input for a transaction-context scalar and constrains it on chain, which stops mempool witness-copy and recipient-redirect attacks. Because the two modes need different circuits, a proof made for one is never accepted by the other. See [Section 11 of the tutorial](docs/tutorial.md#11-transaction-binding-recommended-for-production) for the end-to-end flow.
 
+The scalar is `tx_hash` with its top byte cleared, so it covers every input, output, output data field and dep in one value. This is the same digest CKB's default lock signs, which means a bound zk-Lock spend authorises exactly the scope a signed spend does, and a circuit author has no layout convention to learn beyond "public input 0 is the transaction". An earlier revision hashed only the first group input and the first output, which left any additional same-group input outside the authorisation scope. A partial digest obliges an explicit cardinality rule, because a hash can pin the bytes of what it covers but cannot say "and nothing else". Widening the digest removed the hole and the rule together.
+
 ## Build
 
     make build
@@ -78,7 +80,7 @@ Under transaction binding, use `lock-bound` / `unlock-bound` in place of `lock` 
 
 ## TypeScript SDK
 
-`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `lockBound`, `computeContextHash`, `unlockBound`, and the pure `planBoundUnlock` and `buildBoundUnlockTx` for the transaction-binding mode. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
+`sdk/ts/` provides the same off-chain surface as a TypeScript package (`@zk-lock/sdk`, unpublished, used from the cloned repo). It exports `encodeVerifyingKey`, `encodeProof`, `encodePublicInputs`, `hashVk`, `hashPi`, `verify`, `deployVk`, `lock`, and `unlock` for the generic script, plus `boundContextScalar`, `lockBound`, `computeContextHash`, `unlockBound`, and the pure `planBoundUnlock` and `buildBoundUnlockTx` for the transaction-binding mode. `boundContextScalar` is the primitive: it takes any `ccc.Transaction` and returns the scalar to prove against, so an application is not limited to the one-input, one-output shape the convenience helpers build. `verify` runs the same deserializer the on-chain script uses plus a Groth16 pairing check locally, so a TypeScript-only user can pre-flight their bytes without touching the Rust CLI. The tutorial's TypeScript path uses it end to end.
 
 ## Pudge testnet
 
@@ -97,14 +99,32 @@ Reference transactions built with the current SDK against the Poseidon-preimage 
 
 ### Transaction-binding `zk-lock-bound`
 
-- Contract cell out_point: `0x9cf1e0a6ecc8eeb2705a894a828c07898e77a68a0b9d42b4ff8953bd7c569f5f:0` ([explorer](https://pudge.explorer.nervos.org/transaction/0x9cf1e0a6ecc8eeb2705a894a828c07898e77a68a0b9d42b4ff8953bd7c569f5f))
-- Contract `code_hash` (type): `0x0e366b1b48b88054474a91c7c6487b1edf1a33f25be1622678deab68d5166872`
-- Poseidon-preimage-bound vk cell (used by Section 11 of the tutorial): `0x2adb611b833126ec59234cb8e8645a2da91209fb4450187427fdbf5dc6dad1b9:0`
+- Contract cell out_point: `0x5f21b4d1e6b8a7fa3d0e739fbc7b6d42e660d7e1ef02a857c6ab249f5b004011:0` ([explorer](https://pudge.explorer.nervos.org/transaction/0x5f21b4d1e6b8a7fa3d0e739fbc7b6d42e660d7e1ef02a857c6ab249f5b004011))
+- Contract `code_hash` (type): `0xfbb4acb5c3f8fc8b24216dc8dc8d6bb8f8d3ea9aab4b29a210571959a1f9028e`
+- Poseidon-preimage-bound vk cell (used by Section 11 of the tutorial): `0x90d0db44dc418db45e7cfe68cbc92ee5cfe79809f106df9879a8981d83d6d8c3:0`
 
-Reference transactions built with the Rust CLI against the Poseidon-preimage-bound circuit:
+Both cells are verifiable against this checkout. The contract cell's `data_hash` is `0x21f2173b72484484e5fb095e2f5d3b11b9379535cbfbd0e4f592d6244f191c2d`, which is `blake2b_256` of `build/release/zk-lock-bound`, and the vk cell's is `0x5773886c51273f909f1408e5822aeff6271aafaaa013e81ce84f83de2329f620`, the value pinned in `expected_vk_hash.txt`.
 
-- Lock: [`0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360`](https://pudge.explorer.nervos.org/transaction/0xfcd9a7e4b2f0c585cf5d11f7f0f8e9b00da87b159a501a29bdc501e1fe788360)
-- Unlock: [`0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c`](https://pudge.explorer.nervos.org/transaction/0xdd26f8177e8fcdb106ad0166ad89cb13cb060bb31860fc7bca75e87d3653d69c)
+Reference transactions against the Poseidon-preimage-bound circuit, built with the Rust CLI:
+
+- Lock: [`0x056725c96fc8bd7aaff016b36619e3a8f670aa856666b5344f3158dcd10c0659`](https://pudge.explorer.nervos.org/transaction/0x056725c96fc8bd7aaff016b36619e3a8f670aa856666b5344f3158dcd10c0659)
+- Unlock: [`0x013b0946b00ac5db51da4342803b4c81f2460d72802852753b93f7b18b372f85`](https://pudge.explorer.nervos.org/transaction/0x013b0946b00ac5db51da4342803b4c81f2460d72802852753b93f7b18b372f85)
+
+That unlock is worth reading closely, because the binding is visible in the hashes themselves. The context scalar the proof committed to was
+
+```
+0x013b0946b00ac5db51da4342803b4c81f2460d72802852753b93f7b18b372f00
+```
+
+and the transaction it was spent in hashes to
+
+```
+0x013b0946b00ac5db51da4342803b4c81f2460d72802852753b93f7b18b372f85
+```
+
+The same 31 bytes, differing only in the top byte the script clears. The proof was made for that transaction and no other.
+
+The previous deployment at `0x9cf1e0a6...:0` is superseded. It derived its context scalar from the first group input and the first output rather than from `tx_hash`, so do not lock value behind it.
 
 ## Repository layout
 
