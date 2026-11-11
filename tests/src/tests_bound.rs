@@ -1,7 +1,7 @@
 use ckb_testtool::ckb_hash::blake2b_256;
 use ckb_testtool::ckb_types::{
     bytes::Bytes,
-    core::{ScriptHashType, TransactionBuilder, TransactionView},
+    core::{Capacity, ScriptHashType, TransactionBuilder, TransactionView},
     packed::{CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
     prelude::*,
 };
@@ -541,14 +541,52 @@ fn generic_witness_replayed_against_bound_rejects() {
     assert_rejects_with(&ctx, &tx, E_PI_COMMITMENT_MISMATCH);
 }
 
-// `tx_hash` covers the cell deps, so the two tests below need
-// `Context::new_with_deterministic_rng` for stable dep outpoints. The scalar is
-// therefore a function of the contract binary and the vk bytes, and changing
-// either one invalidates the fixture proof.
+// Every field of the transaction the fixture proof is bound to is pinned here,
+// deps included, because `tx_hash` covers cell_deps and a dep is identified by
+// an outpoint. Letting ckb-testtool choose those outpoints would tie the proof
+// to the compiled binary, which is not byte-identical across machines, so the
+// fixture could pass locally and fail in CI. See `pinned_dep`.
 const PINNED_INPUT_TX_HASH: [u8; 32] = [0xAA; 32];
 const PINNED_OUT_CODE_HASH: [u8; 32] = [0xBB; 32];
 const PINNED_OUT_ARGS: [u8; 20] = [0xCC; 20];
 const PINNED_OUT_CAPACITY: u64 = 500;
+const PINNED_CONTRACT_DEP_TX_HASH: [u8; 32] = [0x11; 32];
+const PINNED_VK_DEP_TX_HASH: [u8; 32] = [0x22; 32];
+
+// Registers `data` as a dep cell at a fixed outpoint, and returns that outpoint.
+//
+// `Context::deploy_cell` derives an outpoint from the data hash, so the dep
+// outpoint moves whenever the bytes move. A lock script is not part of the
+// RawTransaction, only the outpoint it is spent from, so pinning the dep here
+// keeps `tx_hash` constant while the script's code hash still tracks the binary
+// the test actually runs.
+fn pinned_dep(ctx: &mut Context, tx_hash: [u8; 32], data: Bytes) -> OutPoint {
+    let out_point = OutPoint::new_builder()
+        .tx_hash(tx_hash.pack())
+        .index(0u32)
+        .build();
+    let cell = CellOutput::new_builder().build();
+    let capacity = cell
+        .occupied_capacity(Capacity::bytes(data.len()).expect("dep data size"))
+        .expect("dep capacity");
+    ctx.create_cell_with_out_point(
+        out_point.clone(),
+        cell.as_builder().capacity(capacity.pack()).build(),
+        data,
+    );
+    out_point
+}
+
+// The contract bytes ckb-testtool located, so the pinned copy is the same
+// binary the suite builds without this test duplicating the search path.
+fn contract_bytes(ctx: &mut Context) -> Bytes {
+    let found = ctx.deploy_cell_by_name(CONTRACT_NAME);
+    ctx.cells
+        .get(&found)
+        .expect("deployed contract cell")
+        .1
+        .clone()
+}
 
 fn bound_vk_hash() -> [u8; 32] {
     blake2b_256(BOUND_VK_BYTES)
@@ -621,13 +659,19 @@ fn pinned_output_cell() -> CellOutput {
 
 #[test]
 fn success_path() {
-    let mut ctx = Context::new_with_deterministic_rng();
+    let mut ctx = Context::default();
 
-    let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
-    let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
+    let contract = contract_bytes(&mut ctx);
+    let script_op = pinned_dep(&mut ctx, PINNED_CONTRACT_DEP_TX_HASH, contract);
+    let vk_op = pinned_dep(
+        &mut ctx,
+        PINNED_VK_DEP_TX_HASH,
+        Bytes::from(BOUND_VK_BYTES.to_vec()),
+    );
     let lock_script = ctx
-        .build_script(
+        .build_script_with_hash_type(
             &script_op,
+            ScriptHashType::Data1,
             args_bytes(bound_vk_hash(), bound_body_commitment()),
         )
         .expect("script");
@@ -682,13 +726,19 @@ fn success_path() {
 // anything changes the hash, so the committed scalar stops matching.
 #[test]
 fn second_cell_with_same_args_rejects() {
-    let mut ctx = Context::new_with_deterministic_rng();
+    let mut ctx = Context::default();
 
-    let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
-    let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
+    let contract = contract_bytes(&mut ctx);
+    let script_op = pinned_dep(&mut ctx, PINNED_CONTRACT_DEP_TX_HASH, contract);
+    let vk_op = pinned_dep(
+        &mut ctx,
+        PINNED_VK_DEP_TX_HASH,
+        Bytes::from(BOUND_VK_BYTES.to_vec()),
+    );
     let lock_script = ctx
-        .build_script(
+        .build_script_with_hash_type(
             &script_op,
+            ScriptHashType::Data1,
             args_bytes(bound_vk_hash(), bound_body_commitment()),
         )
         .expect("script");

@@ -157,24 +157,30 @@ output later.
 
 ## What answer three costs
 
-Two things, stated plainly because neither is free.
-
 **The prover must know the final transaction.** Not just the recipient: the fee rate, the deps,
 the output data, all of it. Change anything after computing the context and the spend fails
 with `ContextMismatch`. This was already true under answer two; it is now true of more fields.
 
-**Fixtures become a function of the deployed code.** `tx_hash` covers `cell_deps`, and a dep is
-identified by an outpoint, and in tests the outpoint of a deployed cell derives from its data
-hash. So the bound test fixture's proof is now a function of the contract binary. Editing a
-comment in `crates/zk-lock-core/` shifts line numbers, changes the binary, moves the dep
-outpoint, moves `tx_hash`, and invalidates the proof. I hit exactly that while tidying comments
-and had to re-prove.
+That is the whole of the price, but there is a trap on the way to it that cost me a CI run, and
+it is worth writing down because anyone testing a lock that commits to `tx_hash` will hit it.
 
-This is the trade that answer two was protecting, and losing it is the real price of the wider
-digest. The mitigation is ergonomic rather than structural: the test asserts the context before
-it runs the VM and prints the decimal to paste into the circuit's `input.json`, so regenerating
-is prove plus re-encode rather than a hunt. The circuit's `input.json` holds the current value,
-so `tests/fixtures/bound/` is reproducible from source.
+A test fixture holding a real proof is bound to one transaction, and `tx_hash` covers
+`cell_deps`, and a dep is identified by an outpoint. `ckb-testtool` derives the outpoint of a
+deployed cell from that cell's data hash, so by default the fixture's proof is a function of the
+contract binary. That is worse than it sounds. Editing a comment in the contract source shifts
+line numbers, changes the debug info, changes the binary, moves the dep outpoint and invalidates
+the proof. Worse, the binary is not byte-identical across machines, so a re-proved fixture can
+pass locally and fail in CI with a different required context, forever.
+
+The fix is to pin the dep outpoints rather than let them be derived. A lock script is not part
+of the RawTransaction, only the outpoint it is spent from, so registering the contract and the
+verifying key at fixed outpoints keeps `tx_hash` constant while the script's code hash still
+tracks the binary the test actually runs. `tests/src/tests_bound.rs` does this in `pinned_dep`,
+and the fixture then depends on nothing but the pinned constants and the vk. Verified by
+changing the binary deliberately and confirming the required context did not move.
+
+So the answer-two property this looked like it was giving up, fixtures independent of the
+compiled contract, turns out to be recoverable. It just has to be arranged rather than assumed.
 
 ## The ZK-specific footgun, which is unrelated to all of the above
 
