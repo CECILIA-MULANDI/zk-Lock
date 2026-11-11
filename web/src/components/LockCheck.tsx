@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LockGlyph } from "./Nav";
 import type { Attempt } from "../lib/prove";
+import { FeedbackForm } from "./FeedbackForm";
 import {
   DEFAULT_RECIPIENT_ADDRESS,
   DEMO_CELLS,
@@ -300,6 +301,9 @@ export function LockCheck({
               The fee came out of the locked cell itself, which is why this
               needed no wallet and no funds of yours.
             </p>
+            <div className="zkl-rise zkl-rise-3">
+              <FeedbackForm />
+            </div>
           </div>
           <dl className="zkl-rise zkl-rise-3 space-y-3">
             <div>

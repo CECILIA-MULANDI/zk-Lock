@@ -144,5 +144,32 @@ export const DEMO_CELLS: ReadonlyArray<{ txHash: string; index: number }> = [
 export const DEFAULT_RECIPIENT_ADDRESS: string | null =
   "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq2rz87rdtwfny5d4q2e4muzjw5qrqgpcwqsuvudr";
 
+/**
+ * The Google Form behind the questionnaire. `null` hides it entirely.
+ *
+ * `FEEDBACK_FIELDS` are its `entry.<id>` names, read from the live form's
+ * `FB_PUBLIC_LOAD_DATA_`. Deleting and re-adding a question changes its id, and
+ * answers to it would then be dropped silently, so re-read them if the form is
+ * edited.
+ */
+export const FEEDBACK_FORM_ID: string | null =
+  "1FAIpQLSe5KOUMpOVAMTivzL2_KcRXSK21k0IEXtkp6Ji5jC0pkbvUsQ";
+
+export const FEEDBACK_FIELDS = {
+  developer: "entry.1254555928",
+  worked: "entry.698870050",
+  whatHappened: "entry.34785685",
+  confusing: "entry.1481391089",
+  believed: "entry.243093733",
+} as const;
+
+/** Google's own page for the same form, offered to anyone who prefers it. */
+export const feedbackFormUrl = (id: string) =>
+  `https://docs.google.com/forms/d/e/${id}/viewform`;
+
+/** Where a filled-in questionnaire is posted. */
+export const feedbackPostUrl = (id: string) =>
+  `https://docs.google.com/forms/d/e/${id}/formResponse`;
+
 export const explorerTx = (txHash: string) =>
   `${PUDGE_EXPLORER}/transaction/${txHash}`;
