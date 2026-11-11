@@ -20,10 +20,36 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # ckb-std compiles the CKB C standard library from source, and the
-      # contract Makefile derives llvm-ar and llvm-objcopy from the clang
-      # path, so the whole LLVM toolchain has to be present.
-      - name: Install LLVM toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang llvm
+      # contract Makefile derives llvm-ar and llvm-objcopy from the clang path
+      # by string substitution, so clang, llvm-ar and llvm-objcopy all have to
+      # sit in one directory.
+      #
+      # The runner image already ships several LLVM versions, so prefer those
+      # and touch the network only if none of them is usable. `apt-get` here
+      # was failing to resolve its mirror, which has nothing to do with this
+      # repository and should not be able to fail a build.
+      #
+      # `scripts/find_clang` returns $CLANG verbatim when it is set, so putting
+      # it in the environment is enough for every later step.
+      - name: Locate the LLVM toolchain
+        run: |
+          for dir in /usr/lib/llvm-20 /usr/lib/llvm-19 /usr/lib/llvm-18 \
+                     /usr/lib/llvm-17 /usr/lib/llvm-16; do
+            if [ -x "$dir/bin/clang" ] \
+               && [ -x "$dir/bin/llvm-ar" ] \
+               && [ -x "$dir/bin/llvm-objcopy" ]; then
+              echo "using $dir"
+              echo "CLANG=$dir/bin/clang" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "no preinstalled LLVM found, falling back to apt"
+          for attempt in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y clang llvm && exit 0
+            echo "apt attempt $attempt failed"
+            sleep 20
+          done
+          exit 1
 
       - name: Format
         run: cargo fmt --all -- --check
