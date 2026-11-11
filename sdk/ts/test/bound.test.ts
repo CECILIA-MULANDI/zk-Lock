@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ccc } from "@ckb-ccc/core";
 import {
+  boundContextScalar,
   buildBoundUnlockTx,
   planBoundUnlock,
   type BoundPlan,
@@ -105,10 +106,16 @@ describe("planBoundUnlock", () => {
     expect(() => plan({ inputCapacity: 1n })).toThrow(/too small/);
   });
 
-  it("refuses a non-empty output 0 data field it cannot build", () => {
-    expect(() =>
-      plan({ outputData: new Uint8Array([1, 2, 3]) })
-    ).toThrow(/empty output 0 data/);
+  it("binds to output 0's data, which it used to refuse outright", () => {
+    const other = plan({ outputData: new Uint8Array([1, 2, 3]) });
+    expect(other.contextScalar).not.toBe(plan().contextScalar);
+  });
+
+  // The narrow digest left cell_deps uncovered, so the verifier a transaction
+  // loads could be swapped without moving the scalar.
+  it("binds to the cell deps", () => {
+    const other = plan({ vkDep: { ...SHAPE.vkDep, index: 1 } });
+    expect(other.contextScalar).not.toBe(plan().contextScalar);
   });
 });
 
@@ -192,5 +199,18 @@ describe("the plan and the transaction cannot disagree", () => {
       piBytes: PI_BYTES,
     });
     expect(outputCapacityOf(tx) + p.feeShannons).toBe(p.inputCapacity);
+  });
+
+  // The load-bearing property of the two-pass flow: placeholder and real proof
+  // must hash the same, or proving against a transaction is circular.
+  it("gives the same scalar for the placeholder and the real proof", () => {
+    const p = plan();
+    const tx = buildBoundUnlockTx({
+      ...SHAPE,
+      plan: p,
+      proofBytes: realProof,
+      piBytes: PI_BYTES,
+    });
+    expect(boundContextScalar(tx)).toBe(p.contextScalar);
   });
 });

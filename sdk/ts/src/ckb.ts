@@ -1,4 +1,4 @@
-import { ccc, hashCkb } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import { PROOF_LEN } from "./encode.js";
 
 const SHANNONS_PER_CKB = 100_000_000n;
@@ -105,34 +105,32 @@ export async function lockBound(
 }
 
 /**
- * The transaction-binding mode.
+ * The context scalar for `tx`: its transaction hash with the top byte cleared,
+ * which keeps the value below the BN254 scalar modulus.
  *
- * zk-lock-bound commits the proof to the transaction it will be spent in. Its
- * first public input is
+ * `tx_hash` excludes the witnesses, so the real proof can go in afterwards
+ * without moving the value it committed to. Hence the flow: assemble the
+ * transaction with a zero-filled proof, prove against this scalar as public
+ * input 0, swap the real proof in, send. The placeholder still needs the right
+ * length, because length sets the fee, the fee sets output 0's capacity, and
+ * capacity is inside `tx_hash`.
  *
- *   blake2b(out_point || blake2b(output_0_bytes || output_0_data))[..31]
- *
- * (see contracts/zk-lock-bound/src/main.rs). Output 0's capacity is part of
- * output_0_bytes, so the capacity used to compute the context MUST be the
- * capacity the transaction actually ships. If they differ by a single shannon
- * the hash differs completely and the script returns ContextMismatch.
- *
- * That is exactly what went wrong before: the context was computed against
- * `inputCapacity - fee`, the transaction was built at `inputCapacity`, and
- * `completeFeeBy` paid the fee by pulling in the signer's own cells and adding
- * a change output rather than shrinking output 0. Every bound unlock failed.
- *
- * The shape below exists so the two cannot drift. `planBoundUnlock` is the one
- * place the fee and the output capacity are decided, `buildBoundUnlockTx` is
- * the one place a transaction is assembled, and `unlockBound` refuses to send
- * if the plan it was given no longer matches the transaction it would build.
+ * Any transaction shape works. `planBoundUnlock` and `buildBoundUnlockTx` below
+ * are a convenience for the common one-input, one-output unlock.
  */
+export function boundContextScalar(tx: ccc.TransactionLike): `0x${string}` {
+  const scalar = new Uint8Array(32);
+  scalar.set(ccc.bytesFrom(ccc.Transaction.from(tx).hash()).slice(0, 31), 0);
+  return ccc.hexFrom(scalar) as `0x${string}`;
+}
 
 type BoundTxShape = {
   cell: ccc.OutPointLike;
   contractDep: ccc.OutPointLike;
   vkDep: ccc.OutPointLike;
   recipient: ccc.ScriptLike;
+  /** Output 0's data. Covered by `tx_hash` like everything else. */
+  outputData?: ccc.BytesLike;
 };
 
 export type BoundPlan = {
@@ -155,7 +153,9 @@ function buildTx(
   const tx = ccc.Transaction.from({
     inputs: [{ previousOutput: shape.cell }],
     outputs: [{ lock: shape.recipient, capacity: outputCapacity }],
-    outputsData: ["0x"],
+    outputsData: [
+      shape.outputData === undefined ? "0x" : ccc.hexFrom(shape.outputData),
+    ],
     cellDeps: [
       { outPoint: shape.contractDep, depType: "code" },
       { outPoint: shape.vkDep, depType: "code" },
@@ -183,19 +183,8 @@ export function planBoundUnlock(
   params: BoundTxShape & {
     inputCapacity: bigint;
     piBytes: Uint8Array;
-    /** Output 0's data. The script hashes it, so it is part of the binding. */
-    outputData?: Uint8Array;
   }
 ): BoundPlan {
-  const outputData = params.outputData ?? new Uint8Array(0);
-  if (outputData.length !== 0) {
-    // buildTx hard-codes `outputsData: ["0x"]`, so a non-empty binding here
-    // would describe a transaction this module cannot build.
-    throw new Error(
-      "planBoundUnlock only supports an empty output 0 data field"
-    );
-  }
-
   const witnessLock = ccc.hexFrom(
     ccc.bytesConcat(new Uint8Array(PROOF_LEN), params.piBytes)
   );
@@ -209,31 +198,14 @@ export function planBoundUnlock(
   }
   const outputCapacity = params.inputCapacity - feeShannons;
 
-  const outputCell = ccc.CellOutput.from({
-    capacity: outputCapacity,
-    lock: params.recipient,
-  });
-
-  // The script hashes the cell bytes and the data as two updates of one
-  // blake2b. ccc's `CellOutput.hash()` covers only the cell bytes, so it agrees
-  // with the script purely because output 0 carries no data. Concatenating
-  // explicitly keeps that from being a silent coincidence.
-  const firstOutHash = hashCkb(
-    ccc.bytesConcat(outputCell.toBytes(), outputData)
+  // Built at `outputCapacity`, not `inputCapacity`: capacity is inside
+  // `tx_hash`, so the scalar must come from the transaction that will be sent.
+  const contextScalar = boundContextScalar(
+    buildTx(params, outputCapacity, witnessLock)
   );
-
-  const outPoint = ccc.OutPoint.from(params.cell);
-  const full = ccc.bytesFrom(
-    hashCkb(ccc.bytesConcat(outPoint.toBytes(), ccc.bytesFrom(firstOutHash)))
-  );
-
-  // The script compares 31 bytes and leaves the top byte zero, keeping the
-  // value below the BN254 scalar modulus so it is a valid field element.
-  const scalar = new Uint8Array(32);
-  scalar.set(full.slice(0, 31), 0);
 
   return {
-    contextScalar: ccc.hexFrom(scalar) as `0x${string}`,
+    contextScalar,
     outputCapacity,
     feeShannons,
     inputCapacity: params.inputCapacity,
