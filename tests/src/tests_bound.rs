@@ -18,13 +18,9 @@ const CONTRACT_NAME: &str = "zk-lock-bound";
 const VK_BYTES: &[u8] = include_bytes!("../fixtures/vk.bin");
 
 // poseidon-preimage-bound fixtures: pi[0] is the context scalar, pi[1] the
-// digest. Only valid for the transaction success_path builds.
-//
-// To regenerate: set `context` in that circuit's input.json to the decimal
-// below, run prove.sh, encode with the CLI, and leave input.json back at "1"
-// (the tutorial has readers put their own context there).
-//
-//   404578604207945987828464291583686507717703603553113816808421978804353673971
+// digest. Valid only for the one transaction `success_path` builds, since the
+// scalar is that transaction's hash. That circuit's `input.json` holds the same
+// value, so these files are reproducible with prove.sh plus a re-encode.
 const BOUND_VK_BYTES: &[u8] = include_bytes!("../fixtures/bound/vk.bin");
 const BOUND_PROOF_BYTES: &[u8] = include_bytes!("../fixtures/bound/proof.bin");
 const BOUND_PI_BYTES: &[u8] = include_bytes!("../fixtures/bound/public_inputs.bin");
@@ -62,23 +58,12 @@ fn commit_body(body_pi: &[[u8; 32]]) -> [u8; 32] {
     blake2b_256(&buf)
 }
 
-fn expected_context(
-    input_out_point: &OutPoint,
-    out_cell: &CellOutput,
-    out_data: &[u8],
-) -> [u8; 32] {
-    let mut fh_buf = Vec::new();
-    fh_buf.extend_from_slice(out_cell.as_slice());
-    fh_buf.extend_from_slice(out_data);
-    let first_out_hash = blake2b_256(&fh_buf);
-
-    let mut ctx_buf = Vec::new();
-    ctx_buf.extend_from_slice(input_out_point.as_slice());
-    ctx_buf.extend_from_slice(&first_out_hash);
-    let full = blake2b_256(&ctx_buf);
-
+// The scalar the script computes for `tx`. Witnesses are outside `tx_hash`,
+// which is why the tests below can build a transaction, hash it, and rebuild it
+// carrying a witness bound to that hash.
+fn expected_context(tx: &TransactionView) -> [u8; 32] {
     let mut scalar = [0u8; 32];
-    scalar[..31].copy_from_slice(&full[..31]);
+    scalar[..31].copy_from_slice(&tx.hash().raw_data()[..31]);
     scalar
 }
 
@@ -102,14 +87,14 @@ fn build_tx_bound(
         Bytes::new(),
     );
     let input = CellInput::new_builder()
-        .previous_output(input_out_point.clone())
+        .previous_output(input_out_point)
         .build();
 
     let output_cell = CellOutput::new_builder()
         .capacity(500u64)
         .lock(lock_script)
         .build();
-    let outputs = vec![output_cell.clone()];
+    let outputs = vec![output_cell];
     let outputs_data = vec![Bytes::new(); outputs.len()];
 
     let witness_args = WitnessArgs::new_builder().lock(witness_lock.pack()).build();
@@ -125,8 +110,8 @@ fn build_tx_bound(
         builder = builder.cell_dep(CellDep::new_builder().out_point(vk_op).build());
     }
 
-    let expected = expected_context(&input_out_point, &output_cell, &[]);
     let tx = context.complete_tx(builder.build());
+    let expected = expected_context(&tx);
     (tx, expected)
 }
 
@@ -306,23 +291,30 @@ fn context_matches_then_fails_at_groth16() {
         .lock(lock_script)
         .build();
 
-    let expected = expected_context(&input_out_point, &output_cell, &[]);
-    let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
-    let witness_args = WitnessArgs::new_builder()
-        .lock(Some(witness).pack())
-        .build();
+    let build = |witness_lock: Bytes| {
+        let witness_args = WitnessArgs::new_builder()
+            .lock(Some(witness_lock).pack())
+            .build();
+        TransactionBuilder::default()
+            .input(
+                CellInput::new_builder()
+                    .previous_output(input_out_point.clone())
+                    .build(),
+            )
+            .output(output_cell.clone())
+            .output_data(Bytes::new().pack())
+            .witness(witness_args.as_bytes().pack())
+            .cell_dep(CellDep::new_builder().out_point(vk_op.clone()).build())
+            .build()
+    };
 
-    let input = CellInput::new_builder()
-        .previous_output(input_out_point)
-        .build();
-    let tx = TransactionBuilder::default()
-        .input(input)
-        .output(output_cell)
-        .output_data(Bytes::new().pack())
-        .witness(witness_args.as_bytes().pack())
-        .cell_dep(CellDep::new_builder().out_point(vk_op).build())
-        .build();
-    let tx = ctx.complete_tx(tx);
+    // Two passes: the scalar hashes the transaction the witness goes into, and
+    // `tx_hash` excludes witnesses, so both passes hash the same.
+    let placeholder = pack_witness_lock(&dummy_proof(), &[[0u8; 32], body[0]]);
+    let expected = expected_context(&ctx.complete_tx(build(placeholder)));
+
+    let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
+    let tx = ctx.complete_tx(build(witness));
 
     // InvalidProof, not VerificationFailed: dummy_proof() is 128 zero bytes,
     // which decodes to points at infinity, and verifier_core rejects those
@@ -392,9 +384,9 @@ fn locked_cell(ctx: &mut Context, parts: &BoundParts, capacity: u64) -> OutPoint
     )
 }
 
-// The proof commits to output(0). Rewriting that output after the fact must
-// invalidate it. This is the recipient-redirect case: an attacker reuses a
-// broadcast witness but pays a different cell.
+// The proof commits to the whole transaction, outputs included. Rewriting an
+// output after the fact must invalidate it. This is the recipient-redirect
+// case: an attacker reuses a broadcast witness but pays a different cell.
 #[test]
 fn wrong_output_rejects() {
     let mut ctx = Context::default();
@@ -406,7 +398,15 @@ fn wrong_output_rejects() {
         .capacity(500u64)
         .lock(parts.lock_script.clone())
         .build();
-    let expected = expected_context(&input_out_point, &committed_output, &[]);
+    let committed = submit(
+        &mut ctx,
+        &parts,
+        input_out_point.clone(),
+        committed_output,
+        Bytes::new(),
+        pack_witness_lock(&dummy_proof(), &[[0u8; 32], body[0]]),
+    );
+    let expected = expected_context(&committed);
     let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
 
     // Same shape, different capacity: the attacker keeps the change.
@@ -426,9 +426,8 @@ fn wrong_output_rejects() {
     assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
 }
 
-// output(0)'s DATA is folded into the scalar alongside the cell struct. The
-// other tests all use empty output data, so this is the only one exercising
-// that half of first_out_hash.
+// `outputs_data` is its own field of the RawTransaction. The other tests all
+// use empty output data, so this is the only one exercising it.
 #[test]
 fn wrong_output_data_rejects() {
     let mut ctx = Context::default();
@@ -442,7 +441,15 @@ fn wrong_output_data_rejects() {
         .build();
 
     // Identical cell struct; only the data differs.
-    let expected = expected_context(&input_out_point, &output_cell, b"committed");
+    let committed = submit(
+        &mut ctx,
+        &parts,
+        input_out_point.clone(),
+        output_cell.clone(),
+        Bytes::from_static(b"committed"),
+        pack_witness_lock(&dummy_proof(), &[[0u8; 32], body[0]]),
+    );
+    let expected = expected_context(&committed);
     let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
 
     let tx = submit(
@@ -456,7 +463,7 @@ fn wrong_output_data_rejects() {
     assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
 }
 
-// The proof commits to the spent OutPoint. Reusing the witness against a
+// The proof commits to the transaction's inputs. Reusing the witness against a
 // different cell carrying identical args must fail. This is the mempool
 // witness-copy case, and it is the cross-cell replay that plain zk-lock
 // cannot prevent.
@@ -476,7 +483,15 @@ fn wrong_input_rejects() {
         .lock(parts.lock_script.clone())
         .build();
 
-    let expected = expected_context(&committed_input, &output_cell, &[]);
+    let committed = submit(
+        &mut ctx,
+        &parts,
+        committed_input,
+        output_cell.clone(),
+        Bytes::new(),
+        pack_witness_lock(&dummy_proof(), &[[0u8; 32], body[0]]),
+    );
+    let expected = expected_context(&committed);
     let witness = pack_witness_lock(&dummy_proof(), &[expected, body[0]]);
 
     let tx = submit(
@@ -526,10 +541,10 @@ fn generic_witness_replayed_against_bound_rejects() {
     assert_rejects_with(&ctx, &tx, E_PI_COMMITMENT_MISMATCH);
 }
 
-// Every piece feeding the context scalar is pinned: the committed proof is
-// only valid against this exact transaction. output(0)'s lock is hardcoded
-// rather than the bound script so the scalar does not depend on the compiled
-// contract, which would invalidate the proof on every rebuild.
+// `tx_hash` covers the cell deps, so the two tests below need
+// `Context::new_with_deterministic_rng` for stable dep outpoints. The scalar is
+// therefore a function of the contract binary and the vk bytes, and changing
+// either one invalidates the fixture proof.
 const PINNED_INPUT_TX_HASH: [u8; 32] = [0xAA; 32];
 const PINNED_OUT_CODE_HASH: [u8; 32] = [0xBB; 32];
 const PINNED_OUT_ARGS: [u8; 20] = [0xCC; 20];
@@ -559,6 +574,39 @@ fn bound_witness_lock() -> Bytes {
     Bytes::from(buf)
 }
 
+// Little-endian field element to the decimal snarkjs wants in input.json.
+// Schoolbook base-256 to base-10; the test crate has no bignum.
+fn scalar_to_decimal(scalar: &[u8; 32]) -> String {
+    let mut digits: Vec<u8> = vec![0];
+    for byte in scalar.iter().rev() {
+        let mut carry = u32::from(*byte);
+        for d in digits.iter_mut() {
+            let v = u32::from(*d) * 256 + carry;
+            *d = (v % 10) as u8;
+            carry = v / 10;
+        }
+        while carry > 0 {
+            digits.push((carry % 10) as u8);
+            carry /= 10;
+        }
+    }
+    digits.iter().rev().map(|d| char::from(b'0' + d)).collect()
+}
+
+// If this fires, the transaction moved and the message says how to re-prove.
+fn assert_context_matches_fixtures(tx: &TransactionView) {
+    let expected = expected_context(tx);
+    assert_eq!(
+        expected,
+        bound_context_pi(),
+        "this transaction no longer hashes to the context the bound fixtures \
+         were proved against.\n\nSet \"context\" in \
+         circuits/poseidon-preimage-bound/input.json to:\n\n  {}\n\nthen run \
+         prove.sh there and re-encode tests/fixtures/bound/ with the CLI.",
+        scalar_to_decimal(&expected)
+    );
+}
+
 fn pinned_output_cell() -> CellOutput {
     let lock = Script::new_builder()
         .code_hash(PINNED_OUT_CODE_HASH.pack())
@@ -573,7 +621,7 @@ fn pinned_output_cell() -> CellOutput {
 
 #[test]
 fn success_path() {
-    let mut ctx = Context::default();
+    let mut ctx = Context::new_with_deterministic_rng();
 
     let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
     let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
@@ -599,13 +647,6 @@ fn success_path() {
 
     let output_cell = pinned_output_cell();
 
-    assert_eq!(
-        expected_context(&input_out_point, &output_cell, &[]),
-        bound_context_pi(),
-        "pinned transaction no longer derives the context the fixtures were \
-         proved against; re-run circuits/poseidon-preimage-bound/prove.sh"
-    );
-
     let witness_args = WitnessArgs::new_builder()
         .lock(Some(bound_witness_lock()).pack())
         .build();
@@ -622,8 +663,103 @@ fn success_path() {
         .build();
     let tx = ctx.complete_tx(tx);
 
+    // Before verify_tx, so a moved transaction reports the context it needs
+    // rather than an opaque ContextMismatch.
+    assert_context_matches_fixtures(&tx);
+
     let cycles = ctx
         .verify_tx(&tx, MAX_CYCLES)
         .expect("bound lock should accept a proof bound to this transaction");
     println!("success_path consumed {cycles} cycles");
+}
+
+// A lock runs once per group of inputs sharing it, so a second cell with the
+// same args joins the group and is spent under the one proof in the group's
+// witness. While the digest covered only `GroupInput[0]` and `Output[0]` that
+// cell rode along free, accepted at the same cycle count as `success_path`.
+//
+// The attack is purely additive, which is the point: under `tx_hash` adding
+// anything changes the hash, so the committed scalar stops matching.
+#[test]
+fn second_cell_with_same_args_rejects() {
+    let mut ctx = Context::new_with_deterministic_rng();
+
+    let script_op = ctx.deploy_cell_by_name(CONTRACT_NAME);
+    let vk_op = ctx.deploy_cell(Bytes::from(BOUND_VK_BYTES.to_vec()));
+    let lock_script = ctx
+        .build_script(
+            &script_op,
+            args_bytes(bound_vk_hash(), bound_body_commitment()),
+        )
+        .expect("script");
+
+    // Cell A: exactly the cell success_path's proof is bound to.
+    let a_out_point = OutPoint::new_builder()
+        .tx_hash(PINNED_INPUT_TX_HASH.pack())
+        .index(0u32)
+        .build();
+    ctx.create_cell_with_out_point(
+        a_out_point.clone(),
+        CellOutput::new_builder()
+            .capacity(1000u64)
+            .lock(lock_script.clone())
+            .build(),
+        Bytes::new(),
+    );
+
+    // Cell B: a second cell of the victim at the same address. Same args, so
+    // the same lock script hash, so the same script group.
+    let b_out_point = OutPoint::new_builder()
+        .tx_hash([0xDDu8; 32].pack())
+        .index(0u32)
+        .build();
+    ctx.create_cell_with_out_point(
+        b_out_point.clone(),
+        CellOutput::new_builder()
+            .capacity(1000u64)
+            .lock(lock_script)
+            .build(),
+        Bytes::new(),
+    );
+
+    // Byte-identical to what the proof bound. Enough under the old digest, not
+    // under tx_hash, which is the difference this test records.
+    let output_cell = pinned_output_cell();
+
+    // Output 1 takes cell B's capacity.
+    let thief_lock = Script::new_builder()
+        .code_hash([0xEEu8; 32].pack())
+        .hash_type(ScriptHashType::Data1)
+        .args(Bytes::from(vec![0xEFu8; 20]).pack())
+        .build();
+    let thief_cell = CellOutput::new_builder()
+        .capacity(1500u64)
+        .lock(thief_lock)
+        .build();
+
+    let witness_args = WitnessArgs::new_builder()
+        .lock(Some(bound_witness_lock()).pack())
+        .build();
+
+    let tx = TransactionBuilder::default()
+        // Order matters: A first, so GroupInput[0] is the cell the proof bound.
+        .input(
+            CellInput::new_builder()
+                .previous_output(a_out_point)
+                .build(),
+        )
+        .input(
+            CellInput::new_builder()
+                .previous_output(b_out_point)
+                .build(),
+        )
+        .outputs(vec![output_cell, thief_cell])
+        .outputs_data([Bytes::new(), Bytes::new()].pack())
+        .witness(witness_args.as_bytes().pack())
+        .witness(Bytes::new().pack())
+        .cell_dep(CellDep::new_builder().out_point(vk_op).build())
+        .build();
+    let tx = ctx.complete_tx(tx);
+
+    assert_rejects_with(&ctx, &tx, E_CONTEXT_MISMATCH);
 }

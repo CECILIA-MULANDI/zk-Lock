@@ -22,10 +22,8 @@ pub use error::Error;
 
 use blake2b_ref::Blake2bBuilder;
 use ckb_std::ckb_constants::Source;
-use ckb_std::ckb_types::prelude::Entity;
 use ckb_std::high_level::{
-    QueryIter, load_cell, load_cell_data, load_cell_data_hash, load_input, load_script,
-    load_witness_args,
+    QueryIter, load_cell_data, load_cell_data_hash, load_script, load_tx_hash, load_witness_args,
 };
 
 const PROOF_LEN: usize = 128;
@@ -49,6 +47,9 @@ pub enum Binding {
     /// `1..n` only. This is what stops mempool witness-copy and
     /// recipient-redirect attacks, at the cost of requiring the prover to know
     /// the spending transaction before proving.
+    ///
+    /// The scalar is `tx_hash`, so it covers every input, output, output data
+    /// field and dep at once, leaving nothing for a spender to vary.
     Transaction,
 }
 
@@ -141,21 +142,17 @@ pub fn verify_spend(binding: Binding) -> Result<(), Error> {
 /// Recompute the transaction-context scalar and compare it to the value the
 /// proof committed to.
 ///
-/// The scalar is `blake2b(outpoint ‖ blake2b(first_output ‖ first_output_data))`
-/// with its top byte cleared. Clearing that byte keeps the little-endian value
-/// below `2^248`, and so below the BN254 scalar modulus, which means the
-/// prover and this script always agree on the field element without either
-/// side reducing.
+/// The scalar is `tx_hash` with its top byte cleared, which keeps the
+/// little-endian value below the BN254 scalar modulus so neither side reduces.
+///
+/// `tx_hash` excludes the witnesses, and that is what keeps proving against it
+/// non-circular: the proof lands in `witness.lock` without disturbing the value
+/// it committed to.
 fn check_tx_context(context_pi: &[u8]) -> Result<(), Error> {
-    let outpoint = load_input(0, Source::GroupInput)?.previous_output();
-    let out_cell = load_cell(0, Source::Output)?;
-    let out_data = load_cell_data(0, Source::Output)?;
-
-    let first_out_hash = ckb_blake2b_256_2(out_cell.as_slice(), &out_data);
-    let expected = ckb_blake2b_256_2(outpoint.as_slice(), &first_out_hash);
+    let tx_hash = load_tx_hash()?;
 
     let mut expected_scalar = [0u8; 32];
-    expected_scalar[..31].copy_from_slice(&expected[..31]);
+    expected_scalar[..31].copy_from_slice(&tx_hash[..31]);
 
     if context_pi != expected_scalar {
         return Err(Error::ContextMismatch);
@@ -169,17 +166,6 @@ fn ckb_blake2b_256(data: &[u8]) -> [u8; 32] {
         .personal(b"ckb-default-hash")
         .build();
     hasher.update(data);
-    hasher.finalize(&mut out);
-    out
-}
-
-fn ckb_blake2b_256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    let mut hasher = Blake2bBuilder::new(32)
-        .personal(b"ckb-default-hash")
-        .build();
-    hasher.update(a);
-    hasher.update(b);
     hasher.finalize(&mut out);
     out
 }
