@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { PROOF_LEN } from "./encode.js";
+import { FR_LEN, PI_PREFIX_LEN, PROOF_LEN } from "./encode.js";
 
 const SHANNONS_PER_CKB = 100_000_000n;
 const FEE_RATE_SHANNONS_PER_KB = 1_500n;
@@ -192,7 +192,9 @@ export function planBoundUnlock(
   // Built at the full capacity purely to measure the serialized size. The
   // witness is already its final length, so the size does not move when the
   // capacity does.
-  const feeShannons = feeFor(buildTx(params, params.inputCapacity, witnessLock));
+  const feeShannons = feeFor(
+    buildTx(params, params.inputCapacity, witnessLock)
+  );
   if (params.inputCapacity <= feeShannons) {
     throw new Error("cell capacity is too small to cover the computed fee");
   }
@@ -228,10 +230,32 @@ export function buildBoundUnlockTx(
       `proof must be ${PROOF_LEN} bytes, got ${params.proofBytes.length}`
     );
   }
+  // Two agreements, neither enforced before: public input 0 must be the context
+  // this plan computed, and the assembled transaction must hash to it. A
+  // recipient swap keeps the size and the fee identical, so nothing else here
+  // catches one.
+  if (params.piBytes.length < PI_PREFIX_LEN + FR_LEN) {
+    throw new Error("public inputs are too short to carry a context scalar");
+  }
+  const provedContext = ccc.hexFrom(
+    params.piBytes.slice(PI_PREFIX_LEN, PI_PREFIX_LEN + FR_LEN)
+  );
+  if (provedContext !== params.plan.contextScalar) {
+    throw new Error(
+      `public input 0 is ${provedContext}, but this plan's context is ${params.plan.contextScalar}: the proof was made against a different plan`
+    );
+  }
+
   const witnessLock = ccc.hexFrom(
     ccc.bytesConcat(params.proofBytes, params.piBytes)
   );
-  return buildTx(params, params.plan.outputCapacity, witnessLock);
+  const tx = buildTx(params, params.plan.outputCapacity, witnessLock);
+  if (boundContextScalar(tx) !== params.plan.contextScalar) {
+    throw new Error(
+      "the assembled transaction does not hash to the plan's context: the shape given here differs from the one planned. Rebuild the context and reprove."
+    );
+  }
+  return tx;
 }
 
 /** Fetches the live cell's capacity, then plans against it. */

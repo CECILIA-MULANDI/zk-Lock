@@ -124,16 +124,53 @@ write, so there is no list to maintain.
 meant knowing which fields were covered, in what order, with what framing. Now the convention
 is "public input 0 is the transaction", and the script enforces it.
 
-**It is the same scope a signature has.** CKB's own `secp256k1_blake160_sighash_all` signs
-`tx_hash` plus the group's witnesses. A bound zk-Lock spend now authorises exactly what a
-signed spend authorises, which means "I hold a witness satisfying this circuit" slots in where
-"I hold this private key" used to be, with no change in what the authorisation means. That is
-`SIGHASH_ALL`, and the reason every chain converges on it is the reason above.
+**It is nearly the scope a signature has.** CKB's own `secp256k1_blake160_sighash_all` signs
+`tx_hash` plus the group's witnesses. A bound zk-Lock spend covers the `tx_hash` half, which is
+everything in the `RawTransaction`, so "I hold a witness satisfying this circuit" slots in where
+"I hold this private key" used to be for every field a spender could vary. That is the shape of
+`SIGHASH_ALL`, and the reason every chain converges on it is the reason above. It is not the
+whole of `sighash_all`, and the next section is the part it leaves out.
 
 It also **permits something the cardinality rule would have had to forbid**: one proof spending
 several cells that share `lock.args`, in a transaction the prover chose. That is a legitimate
 thing to want, and the count rule would have banned it to police an attack that the wider
 digest kills outright.
+
+### What tx_hash does not cover
+
+`tx_hash` excludes the witnesses, and `sighash_all` does not: its signing message is
+`blake2b(tx_hash ‖ witness[0] ‖ the group's other witnesses ‖ witnesses beyond the input
+count)`. So a signed spend commits to strictly more than a bound zk-Lock spend does.
+`@a19q3` raised this in a review of answer three.
+
+Three things sit in that gap.
+
+**The rest of witness 0.** `WitnessArgs` carries `lock`, `input_type` and `output_type`. The
+script reads `lock` and checks it against the public inputs, so that field defends itself: edit
+the proof and verification fails, edit the public inputs and `pi_commitment` or the context
+check fails. `input_type` and `output_type` are covered by neither `tx_hash` nor any check here,
+so anyone relaying the transaction may rewrite them and the proof still verifies.
+
+**Witnesses beyond the inputs.** `sighash_all` hashes them; this does not. Appending junk
+witnesses leaves `tx_hash`, and therefore the txid, unchanged, so the result is the same
+transaction carrying different witness bytes. It cannot steal anything, it can only inflate the
+serialized size and so dilute the fee rate below what will relay.
+
+**Other groups' witnesses.** Each group's own lock defends its own, so this is not a hole, but
+it is worth saying that a bound zk-Lock input contributes no protection to the rest of a
+multi-script transaction.
+
+None of this is reachable today, because nothing in this repository pairs zk-Lock with a script
+that reads a witness. It stops being theoretical the moment one does, since `input_type` and
+`output_type` are exactly where a type script's own data would live, and that data would be the
+one part of the transaction a bound proof does not pin. A nullifier set is the obvious example,
+and the reason this section exists rather than a one-line caveat.
+
+The fix is to widen the scalar to `blake2b(tx_hash ‖ the group's witnesses)`, zeroing the `lock`
+field to its correct length before hashing it, which is the same trick `sighash_all` uses for
+the signature and the same two-pass flow as below one level deeper. That costs cycles, a witness
+format change and a redeployment, so it waits. It is a prerequisite for the nullifier work in
+**Still open**, not an independent improvement.
 
 ### Why committing to the transaction is not circular
 
@@ -232,7 +269,9 @@ Four of these are not about zero knowledge and apply to any CKB lock:
    transaction, write down how many of each uncovered thing may appear, because the hash cannot.
    If the rule you would need is one you cannot live with, your digest is the wrong width.
 3. **`tx_hash` excludes the witnesses.** This is the property that makes it possible to commit
-   to a transaction from inside that transaction, whether you are signing or proving.
+   to a transaction from inside that transaction, whether you are signing or proving. It is also
+   the reason committing to `tx_hash` alone is not `sighash_all`: the witnesses are the part you
+   have to go back and cover deliberately, and the zeroed-field trick is how both do it.
 4. **Widening a digest to cover `cell_deps` couples your test fixtures to your deployed code.**
    Worth knowing before it surprises you, and worth the cost.
 
@@ -254,3 +293,12 @@ scalar it cannot decompose, so it cannot express "output 0 must keep capacity X"
 successor must carry this same lock". A lock runs only on spend and cannot constrain its own
 creation, so invariants across a state transition belong to a type script. That was true of all
 three answers above, and it is a separate piece of work.
+
+Two changes stand between this and anything pool-shaped, meaning a set of members each spending
+once from shared value, and they have to land in this order. First, widen the scalar to cover
+the group's witnesses, per **What tx_hash does not cover**. Second, let `pi_commitment` cover a
+prefix of the body rather than all of it, so the trailing public inputs are free for a type
+script to police. The second is what expresses a nullifier, since a per-member marker has to
+differ per spend and `pi_commitment` currently pins the body to one value chosen when the cell
+is funded. Doing the second without the first would put the type script's data in the one place
+a bound proof does not reach.
