@@ -218,7 +218,15 @@ async fn main() -> anyhow::Result<()> {
             let proof_bytes = std::fs::read(&proof).context("read proof file")?;
             let pi_bytes = std::fs::read(&public_inputs).context("read pi file")?;
 
-            let tx = unlock::unlock(&sender, cell, contract_dep, vk_dep, proof_bytes, pi_bytes)?;
+            let tx = unlock::unlock(
+                &sender,
+                cell,
+                contract_dep,
+                vk_dep,
+                proof_bytes,
+                pi_bytes,
+                false,
+            )?;
             println!("unlocked");
             println!("tx_hash:   {:#x}", tx);
         }
@@ -265,6 +273,7 @@ async fn main() -> anyhow::Result<()> {
                 vk_dep,
                 proof_bytes,
                 pi_bytes,
+                true,
             )?;
             println!("bound unlocked");
             println!("tx_hash:   {:#x}", tx);

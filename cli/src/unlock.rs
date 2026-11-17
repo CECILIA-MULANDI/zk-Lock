@@ -16,6 +16,7 @@ pub fn unlock(
     vk_dep: OutPoint,
     proof: Vec<u8>,
     pi_bytes: Vec<u8>,
+    bound: bool,
 ) -> Result<H256> {
     let network = NetworkInfo::testnet();
     let rpc = CkbRpcClient::new(network.url.as_str());
@@ -75,6 +76,23 @@ pub fn unlock(
         .context("cell capacity is too small to cover the computed fee")?;
 
     let tx = build_tx(output_capacity);
+    // Mirrors check_tx_context in zk-lock-core. Checking locally fails while
+    // the proof is still reusable; this path re-derives capacity from the live
+    // cell on every run, so a capacity change silently builds a different
+    // transaction.
+    if bound {
+        let mut expected = [0u8; 32];
+        expected[..31].copy_from_slice(&tx.hash().raw_data()[..31]);
+        let committed = pi_bytes
+            .get(4..36)
+            .context("public inputs are too short to carry a context scalar")?;
+        if committed != expected {
+            anyhow::bail!(
+                "public input 0 does not match this transaction: the proof was built for a different one. Re-run context-hash and reprove."
+            );
+        }
+    }
+
     let json_tx = ckb_jsonrpc_types::TransactionView::from(tx);
     let tx_hash = rpc
         .send_transaction(json_tx.inner, None)

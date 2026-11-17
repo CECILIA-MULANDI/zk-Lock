@@ -6,7 +6,7 @@ import {
   planBoundUnlock,
   type BoundPlan,
 } from "../src/ckb.js";
-import { PROOF_LEN } from "../src/encode.js";
+import { PROOF_LEN, PI_PREFIX_LEN } from "../src/encode.js";
 
 /**
  * Regression cover for the bound unlock.
@@ -63,6 +63,12 @@ const plan = (overrides: Partial<Parameters<typeof planBoundUnlock>[0]> = {}) =>
   });
 
 const realProof = new Uint8Array(PROOF_LEN).fill(0x7c);
+/** PI_BYTES with a plan's context in public input 0, as a real spend carries. */
+const piBytesFor = (p: BoundPlan) => {
+  const bytes = PI_BYTES.slice();
+  bytes.set(ccc.bytesFrom(p.contextScalar), PI_PREFIX_LEN);
+  return bytes;
+};
 
 const outputCapacityOf = (tx: ccc.Transaction) =>
   ccc.numFrom(tx.outputs[0].capacity);
@@ -126,7 +132,7 @@ describe("buildBoundUnlockTx", () => {
       ...SHAPE,
       plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: piBytesFor(p),
     });
     // This is the assertion the old implementation failed: it built output 0 at
     // the pre-fee capacity and let completeFeeBy append a change output.
@@ -135,11 +141,12 @@ describe("buildBoundUnlockTx", () => {
   });
 
   it("adds no second output and no extra input", () => {
+    const p = plan();
     const tx = buildBoundUnlockTx({
       ...SHAPE,
-      plan: plan(),
+      plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: piBytesFor(p),
     });
     expect(tx.outputs.length).toBe(1);
     expect(tx.inputs.length).toBe(1);
@@ -153,39 +160,42 @@ describe("buildBoundUnlockTx", () => {
       ...SHAPE,
       plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: piBytesFor(p),
     });
     const size = BigInt(tx.toBytes().length);
     expect((size * 1_500n + 999n) / 1000n).toBe(p.feeShannons);
   });
 
   it("rejects a proof that is not 128 bytes", () => {
+    const p = plan();
     const build = (len: number) =>
       buildBoundUnlockTx({
         ...SHAPE,
-        plan: plan(),
+        plan: p,
         proofBytes: new Uint8Array(len),
-        piBytes: PI_BYTES,
+        piBytes: piBytesFor(p),
       });
     expect(() => build(127)).toThrow(/must be 128 bytes/);
     expect(() => build(129)).toThrow(/must be 128 bytes/);
   });
 
   it("carries proof then public inputs in witness.lock", () => {
+    const p = plan();
+    const pi = piBytesFor(p);
     const tx = buildBoundUnlockTx({
       ...SHAPE,
-      plan: plan(),
+      plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: pi,
     });
     const lock = tx.getWitnessArgsAt(0)?.lock;
     expect(lock).toBeDefined();
     // ccc hands back a Node Buffer, which toEqual will not match against a
     // plain Uint8Array, so compare the byte values rather than the containers.
     const bytes = Array.from(ccc.bytesFrom(lock!));
-    expect(bytes.length).toBe(PROOF_LEN + PI_BYTES.length);
+    expect(bytes.length).toBe(PROOF_LEN + pi.length);
     expect(bytes.slice(0, PROOF_LEN)).toEqual(Array.from(realProof));
-    expect(bytes.slice(PROOF_LEN)).toEqual(Array.from(PI_BYTES));
+    expect(bytes.slice(PROOF_LEN)).toEqual(Array.from(pi));
   });
 });
 
@@ -196,7 +206,7 @@ describe("the plan and the transaction cannot disagree", () => {
       ...SHAPE,
       plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: piBytesFor(p),
     });
     expect(outputCapacityOf(tx) + p.feeShannons).toBe(p.inputCapacity);
   });
@@ -209,8 +219,33 @@ describe("the plan and the transaction cannot disagree", () => {
       ...SHAPE,
       plan: p,
       proofBytes: realProof,
-      piBytes: PI_BYTES,
+      piBytes: piBytesFor(p),
     });
     expect(boundContextScalar(tx)).toBe(p.contextScalar);
+  });
+  it("rejects a transaction whose shape drifted from the plan", () => {
+    const p = plan();
+    expect(() =>
+      buildBoundUnlockTx({
+        ...SHAPE,
+        recipient: { ...SHAPE.recipient, args: `0x${"11".repeat(20)}` },
+        plan: p,
+        proofBytes: realProof,
+        piBytes: piBytesFor(p),
+      })
+    ).toThrow(/differs from the one planned/);
+  });
+
+  it("rejects public inputs proved against a different plan", () => {
+    const p = plan();
+    const other = plan({ inputCapacity: INPUT_CAPACITY + 1n });
+    expect(() =>
+      buildBoundUnlockTx({
+        ...SHAPE,
+        plan: p,
+        proofBytes: realProof,
+        piBytes: piBytesFor(other),
+      })
+    ).toThrow(/different plan/);
   });
 });
